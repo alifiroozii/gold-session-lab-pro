@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Set, Tuple
@@ -88,7 +88,30 @@ class AutomatedPaperBot:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_processed_candles (
+                    bot_id TEXT NOT NULL,
+                    timeframe TEXT NOT NULL,
+                    bar_timestamp TEXT NOT NULL,
+                    processed_at TEXT NOT NULL,
+                    PRIMARY KEY(bot_id, timeframe, bar_timestamp)
+                )
+                """
+            )
             conn.commit()
+
+    def _mark_bar_processed(self, timeframe: str, bar_timestamp: datetime) -> bool:
+        """Fail-closed durable deduplication across polling and app restarts."""
+        with sqlite3.connect(self.db_path) as conn:
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO bot_processed_candles "
+                "(bot_id, timeframe, bar_timestamp, processed_at) VALUES (?,?,?,?)",
+                (self.bot_id, timeframe, bar_timestamp.isoformat(),
+                 datetime.now(TZ_UTC).isoformat()),
+            ).rowcount
+            conn.commit()
+        return inserted == 1
 
     def log_event(self, event_type: str, message: str) -> None:
         now = datetime.now(TZ_UTC)
@@ -137,6 +160,7 @@ class AutomatedPaperBot:
         current_bid: float,
         current_ask: float,
         current_time: Optional[datetime] = None,
+        strict_provider: bool = False,
     ) -> List[SetupSignal]:
         """Triggered when a candle closes.
 
@@ -165,6 +189,34 @@ class AutomatedPaperBot:
             return []
 
         last_candle = closed_candles[-1]
+
+        if strict_provider:
+            # The application supplies provider-completed M1 bars and a
+            # separately verified live quote timestamp. Never treat a partial
+            # aggregated bar as confirmed, and never repeat the same event.
+            timeframe = self.engine.current_timeframe
+            minutes = {"1m": 1, "5m": 5, "15m": 15, "1h": 60}.get(timeframe)
+            if minutes is None or self.heartbeat_time.tzinfo is None:
+                return []
+            if not (current_bid > 0 and current_ask > current_bid):
+                return []
+            try:
+                completed = self.engine.data_pipeline.aggregate_candles(
+                    closed_candles, timeframe, require_complete=True
+                )
+            except ValueError:
+                self.log_event("INVALID_CANDLE_BATCH", "کندل‌های فید ناقص، تکراری یا نامعتبر هستند.")
+                return []
+            if not completed:
+                return []
+            bar_start = completed[-1].timestamp
+            bar_closes_at = bar_start + timedelta(minutes=minutes)
+            age = (self.heartbeat_time - bar_closes_at).total_seconds()
+            if age < 0 or age > 90:
+                # Last historical bar is not an immediate next-bar signal.
+                return []
+            if not self._mark_bar_processed(timeframe, bar_start):
+                return []
 
         # 1. Feed Health Check
         feed_health = self.engine.data_pipeline.diagnostics.check_feed_status(
@@ -221,7 +273,10 @@ class AutomatedPaperBot:
             return []
 
         # 4. Run Analysis Pipeline
-        self.engine.load_candles(closed_candles, timeframe=self.engine.current_timeframe)
+        self.engine.load_candles(
+            closed_candles, timeframe=self.engine.current_timeframe,
+            require_complete=strict_provider,
+        )
         self.engine.run_pipeline(allow_pending=True)
 
         new_signals = [s for s in self.engine.signals if s.signal_index == len(self.engine.current_candles) - 1]
@@ -250,9 +305,28 @@ class AutomatedPaperBot:
                 if sl_distance <= 0:
                     continue
 
+                if strict_provider:
+                    # Execution uses current executable Ask for BUY, Bid for SELL,
+                    # not the prior close or backtest next-open proxy.
+                    actual_entry = (current_ask if sig.direction == SignalDirection.BUY
+                                    else current_bid)
+                    sl_distance = abs(actual_entry - sig.sl_price)
+                    if sig.direction == SignalDirection.BUY:
+                        if not sig.sl_price < actual_entry < sig.tp_price:
+                            continue
+                        reward = sig.tp_price - actual_entry
+                    else:
+                        if not sig.tp_price < actual_entry < sig.sl_price:
+                            continue
+                        reward = actual_entry - sig.tp_price
+                    if sl_distance <= 0 or reward / sl_distance < self.risk.min_rr_ratio:
+                        continue
                 calculated_lots = risk_dollars / (sl_distance * acc.contract_size)
-                # Clamp lots
-                lots = round(max(0.01, min(5.0, calculated_lots)), 2)
+                # Never round UP to the minimum lot if it violates the risk cap.
+                import math
+                lots = math.floor(min(5.0, calculated_lots) * 100) / 100
+                if lots < 0.01:
+                    continue
 
                 direction = OrderDirection.BUY if sig.direction == SignalDirection.BUY else OrderDirection.SELL
 
@@ -272,7 +346,5 @@ class AutomatedPaperBot:
                     "ORDER_DISPATCHED",
                     f"ارسال سفارش مجازی {direction.value} {lots} لات به استراتژی {sig.setup_name} (سفارش #{order.order_id})",
                 )
-
-        return new_signals
 
         return new_signals
