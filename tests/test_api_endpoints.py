@@ -44,6 +44,11 @@ def test_broker_account_and_funds() -> None:
     assert with_res.status_code == 200
     assert with_res.json()["balance"] == new_bal - 200.0
 
+    # 4. Clean up and restore account back to default $1000
+    reset_res = client.post("/api/broker/reset")
+    assert reset_res.status_code == 200
+    assert reset_res.json()["balance"] == 1000.0
+
 
 def test_bot_status_and_state_switch() -> None:
     res = client.get("/api/bot/status")
