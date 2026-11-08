@@ -134,3 +134,15 @@ def test_daily_risk_limits_survive_restart_and_claim_atomically(tmp_path: Path) 
     assert restarted.today_trades_count == 1
     assert restarted.daily_start_balance == baseline
     assert restarted._claim_daily_order_slot() is False
+
+
+
+def test_chart_navigation_cannot_change_paper_strategy_timeframe(monkeypatch) -> None:
+    import app as application
+    assert application.bot.engine is not application.engine
+    assert application.bot.engine.current_timeframe == "5m"
+    with monkeypatch.context() as context:
+        context.setattr(application.engine, "current_timeframe", "1m")
+        assert application.bot.engine.current_timeframe == "5m"
+        context.setattr(application.engine, "current_timeframe", "15m")
+        assert application.bot.engine.current_timeframe == "5m"
