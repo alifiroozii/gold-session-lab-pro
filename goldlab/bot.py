@@ -131,7 +131,10 @@ class AutomatedPaperBot:
                 self.set_state(BotState.DATA_DISCONNECTED)
             return []
         elif self.state == BotState.DATA_DISCONNECTED:
-            self.set_state(BotState.PAPER_AUTO)
+            # Fail closed. A recovered feed must NEVER silently re-arm
+            # auto trading; operator must approve a validated strategy again.
+            self.log_event("FEED_RECOVERED", "فید برگشت؛ ربات تا تأیید دستی در حالت توقف باقی می‌ماند.")
+            self.set_state(BotState.PAUSED)
 
         # 2. Risk Pre-Checks
         acc = self.broker.accounts.get(self.account_id)
