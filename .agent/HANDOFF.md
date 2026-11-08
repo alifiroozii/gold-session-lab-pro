@@ -1,7 +1,8 @@
 # Gold Session Lab Pro — handoff (2026-11-08)
 
 Candidate branch: `codex/market-ui-paper-repair`; base `99f2e9f`.
-Verified implementation commit: `0c87353e88d811605d62c3d1b651fc7f09f5050c`.
+Latest implementation commit: `8559e3749e29f4c4cc3ea86bd2172e310f75360c`.
+Earlier shadow fixes: `0c87353e88d811605d62c3d1b651fc7f09f5050c`.
 This handoff is committed separately so its implementation SHA is exact.
 
 ## Architecture and preserved components
@@ -29,7 +30,7 @@ OANDA credentials absent: live entitlement, network reconnect/fills and authenti
 
 ## Next critical tasks
 1. Configure authorized OANDA credentials, verify timestamp/entitlement and capture licensed chronological history. Test disconnect/reconnect and candle gaps with actual provider data.
-2. Fix/verify stream position lifecycle callback mismatch: app passes prices/keywords to state-machine callbacks expecting a timestamp-bearing event. Only associate fills with the matching strategy order, not arbitrary manual orders.
+2. Forward-test the repaired position callbacks with authorized provider quotes; trade outcomes now persist before strategy callbacks and only the matching order changes setup state.
 3. Audit restart restoration of active setup/pending signal context and atomic processed-candle claims before permitting any automatic order path.
 4. Verify full feed-to-close-to-journal pipeline, independent replay and untouched holdout; lock remaining strategy rules before changes. No performance statistics are certified here.
 5. Finish browser interaction/screenshot checks at 1440/1024/390px; existing UI/broker features were preserved, not comprehensively certified.
@@ -37,3 +38,7 @@ OANDA credentials absent: live entitlement, network reconnect/fills and authenti
 
 ## Local chart follow-up
 Official TradingView Advanced Chart now opens by default for OANDA:XAUUSD, with a switch to the existing research chart. Native widget controls handle symbol/timeframe; paper quotes remain independent. Fixed widget autosize collapsing its height. Local server: http://127.0.0.1:8017/ (candidate worktree). Browser verified actual candle chart rendered, reference/research switching passed, zero page JS errors; 15 UI contract tests passed, Node syntax check passed. External ticker request was blocked in headless Chrome, but Advanced Chart loaded. Screenshot: /tmp/goldlab-reference-loaded.png. Display availability depends on TradingView/network; this is not execution-feed validation.
+
+
+## Session/research follow-up
+`session_workspace.py` reconstructs six session windows (Sydney/Tokyo/Asia reference/London/NY/overlap), 30-day history and next-day schedules using IANA zones and server time. Provider-only high/low cache persists with missing/partial coverage exposed. `session-workspace.js` refreshes after tab return/reload. Queued six $1,000 research comparisons survive restart and enter AgentBridge handoff; protocol is `docs/SESSION_RESEARCH_PROTOCOL.md`. No comparisons have run. Full suite: 143 tests, exit 0 (`session-suite.txt`). Browser: six cards, 31 dates, persistent queue; 1440/1024/390px without overflow or JS errors. Widget remains independent; custom session price overlays need licensed candles. AI runtime remains unverified.
