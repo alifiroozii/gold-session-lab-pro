@@ -1000,12 +1000,21 @@ function initWebSocket() {
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             if (msg.type === "TICK" && msg.verified === true) {
-                updateExecutionBadge({
-                    paper_orders_allowed: true, reason: "VERIFIED_LIVE_PRICE",
-                    quote_time: msg.timestamp, bid: msg.bid, ask: msg.ask,
-                    bid_display: msg.bid_display, ask_display: msg.ask_display,
-                });
-                updateLiveQuoteLine(Number(msg.bid), Number(msg.ask));
+                // A stream tick provides quote information, not authorization
+                // to trade. /api/market/status remains the sole execution gate.
+                const bid = Number(msg.bid);
+                const ask = Number(msg.ask);
+                if (Number.isFinite(bid) && Number.isFinite(ask) && ask > bid) {
+                    const bidEl = document.getElementById("quoteBid");
+                    const askEl = document.getElementById("quoteAsk");
+                    const spreadEl = document.getElementById("quoteSpread");
+                    const when = document.getElementById("lastQuoteTime");
+                    if (bidEl) bidEl.textContent = msg.bid_display || String(msg.bid);
+                    if (askEl) askEl.textContent = msg.ask_display || String(msg.ask);
+                    if (spreadEl) spreadEl.textContent = "$" + (ask - bid).toFixed(3);
+                    if (when) when.textContent = "زمان مظنه: " + toShamsiDateTime(msg.timestamp);
+                    updateLiveQuoteLine(bid, ask);
+                }
             } else if (msg.type === "TRADINGVIEW_TICK" && msg.quote) {
                 handleTradingViewQuote(msg.quote);
             } else if (msg.type === "MARKET_STATUS") {
