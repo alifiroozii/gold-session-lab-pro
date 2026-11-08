@@ -41,7 +41,39 @@ class AgentBridge:
                     verified INTEGER NOT NULL DEFAULT 0
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS paper_trade_outcomes (
+                    trade_id TEXT PRIMARY KEY,
+                    observed_at TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    exit_price REAL NOT NULL,
+                    realized_pnl REAL NOT NULL,
+                    close_reason TEXT NOT NULL,
+                    quote_source TEXT NOT NULL,
+                    review_status TEXT NOT NULL DEFAULT 'AWAITING_REVIEW'
+                )
+            """)
             conn.commit()
+
+    def record_closed_paper_trade(self, *, trade_id: str, direction: str,
+                                  entry_price: float, exit_price: float,
+                                  realized_pnl: float, close_reason: str,
+                                  quote_source: str = "OANDA_V20_READ_ONLY") -> bool:
+        """Save observed closed paper outcome once; no AI verdict is inferred."""
+        if not trade_id or not close_reason:
+            raise ValueError("trade id and close reason required")
+        with sqlite3.connect(self.db_path) as conn:
+            added = conn.execute(
+                "INSERT OR IGNORE INTO paper_trade_outcomes"
+                " (trade_id,observed_at,direction,entry_price,exit_price,"
+                " realized_pnl,close_reason,quote_source)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (trade_id, datetime.now(UTC).isoformat(), direction,
+                 entry_price, exit_price, realized_pnl, close_reason, quote_source),
+            ).rowcount == 1
+            conn.commit()
+        return added
 
     def record(self, phase: str, subject: str, details: str = "",
                actor: str = "ANTIGRAVITY", evidence: str = "",
@@ -139,6 +171,12 @@ class AgentBridge:
                     "SELECT autopsy_id AS id, trade_id AS title, verdict AS classification"
                     " FROM trade_autopsies ORDER BY created_at DESC LIMIT 100"
                 ))
+            if "paper_trade_outcomes" in tables:
+                sources.extend(("PAPER_CLOSE", dict(row)) for row in conn.execute(
+                    "SELECT trade_id AS id, trade_id AS title,"
+                    " close_reason AS classification FROM paper_trade_outcomes"
+                    " ORDER BY observed_at DESC LIMIT 100"
+                ))
         for kind, payload in sources:
             with sqlite3.connect(self.db_path) as conn:
                 updated = conn.execute(
@@ -182,9 +220,14 @@ class AgentBridge:
                                    "SELECT event_id,reason,guidance,evidence,confidence,"
                                    " first_seen_utc FROM safety_lessons"
                                    " ORDER BY first_seen_utc DESC LIMIT 20")
+            closed_trades = query("paper_trade_outcomes",
+                                  "SELECT trade_id,observed_at,direction,entry_price,"
+                                  " exit_price,realized_pnl,close_reason,quote_source,"
+                                  " review_status FROM paper_trade_outcomes"
+                                  " ORDER BY observed_at DESC LIMIT 30")
         evidence = json.dumps(
             {"incidents": incidents, "autopsies": autopsies, "hypotheses": hypotheses,
-             "safety_lessons": safety_lessons,
+             "safety_lessons": safety_lessons, "closed_trades": closed_trades,
              "agent_state": {k: v for k, v in state.items() if k != "events"}},
             ensure_ascii=False, indent=2,
         )
