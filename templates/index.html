@@ -230,6 +230,22 @@
 
         <!-- TAB: AI RESEARCH CENTER (NEW V3.0) -->
         <div class="tab-pane" id="tab-ai-research">
+            <div class="agent-observer-box" aria-live="polite">
+                <div class="agent-observer-heading">
+                    <h3>🧠 گزارش واقعی Antigravity و چرخه اصلاح کد</h3>
+                    <span class="agent-status" id="agentConnectionStatus">عامل متصل نیست</span>
+                </div>
+                <p class="text-muted">پایش نرم‌افزار و اجرای AI مستقل‌اند. تنها اقداماتی که با زمان و مدرک ثبت شده‌اند در اینجا دیده می‌شوند؛ ضرر یک معامله لزوماً باگ نیست.</p>
+                <div class="agent-observer-metrics">
+                    <div>خطاهای باز <strong id="agentOpenIncidents">—</strong></div>
+                    <div>فرضیه‌های در انتظار آزمایش <strong id="agentHypotheses">—</strong></div>
+                    <div>پیشنهادهای اصلاح <strong id="agentProposals">—</strong></div>
+                    <div>اصلاحات تأییدشده با شواهد <strong id="agentVerifiedFixes">—</strong></div>
+                </div>
+                <h4>آخرین فعالیت ثبت‌شده</h4>
+                <div id="agentActivityTimeline" class="agent-timeline">هیچ فعالیتی از Antigravity ثبت نشده است. برای شروع، فایل AGENTS.md را در پروژه باز کن.</div>
+            </div>
+
             <!-- Supervisor & Regime Banner -->
             <div class="research-grid-top">
                 <div class="content-box">
@@ -397,7 +413,7 @@
             <div class="research-grid-2col mt-4">
                 <div class="content-box">
                     <h3 class="card-heading">🤖 مدل یادگیری ماشین ارزیابی کیفیت معامله (Shadow Mode)</h3>
-                    <p class="text-muted">امتیازدهی احتمال موفقیت سیگنال‌ها بر اساس لایه‌های سشن، نسبت سایه و FVG بدون نشت آینده.</p>
+                    <p class="text-muted">امتیاز پژوهشی فقط پس از آموزش و اعتبارسنجی واقعی مدل قابل نمایش است؛ نمره نمایشی به‌عنوان احتمال برد ارائه نمی‌شود.</p>
                     <div class="table-responsive mt-3">
                         <table class="data-table" id="mlScoresTable">
                             <thead>
