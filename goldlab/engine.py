@@ -57,11 +57,11 @@ class ResearchEngine:
         self.summary: BacktestSummary = BacktestSummary()
         self.feed_health: Dict[str, str] = {"status": "OFFLINE_EMPTY", "detail": "داده‌ای بارگذاری نشده است."}
 
-    def load_candles(self, candles: List[Candle], timeframe: str = "5m") -> None:
+    def load_candles(self, candles: List[Candle], timeframe: str = "5m", *, require_complete: bool = False) -> None:
         """Loads candle series directly and aggregates to specified timeframe."""
         self.candles_1m = candles
         self.current_timeframe = timeframe
-        self.current_candles = self.data_pipeline.aggregate_candles(candles, timeframe)
+        self.current_candles = self.data_pipeline.aggregate_candles(candles, timeframe, require_complete=require_complete)
         self.feed_health = self.data_pipeline.diagnostics.check_feed_status(self.current_candles)
 
     def load_from_csv(self, csv_path: Path, timeframe: str = "5m") -> None:
