@@ -18,7 +18,7 @@
         <div class="disclaimer-content">
             <span class="shield-icon">🛡️</span>
             <strong>محیط شبیه‌سازی و پژوهش کمی (Paper Trading Only):</strong>
-            تمام داده‌ها، موجودی‌ها و معاملات صرفاً شبیه‌سازی مجازی بوده و فاقد هرگونه تراکنش یا اتصال واقعی به بروکر است.
+            موجودی و معاملات فقط مجازی‌اند. منبع و تاریخ قیمت‌ها به‌صورت جداگانه مشخص می‌شود؛ فایل دمو هرگز داده زنده نیست.
         </div>
         <div class="system-time" id="systemClock">UTC --:--:--</div>
     </div>
@@ -40,26 +40,26 @@
             </div>
             <div class="ticker-box">
                 <span class="ticker-label">Bid:</span>
-                <span class="ticker-val" id="quoteBid">2650.25</span>
+                <span class="ticker-val" id="quoteBid">—</span>
             </div>
             <div class="ticker-box">
                 <span class="ticker-label">Ask:</span>
-                <span class="ticker-val" id="quoteAsk">2650.50</span>
+                <span class="ticker-val" id="quoteAsk">—</span>
             </div>
             <div class="ticker-box">
                 <span class="ticker-label">اسپرد:</span>
-                <span class="ticker-val" id="quoteSpread">$0.25</span>
+                <span class="ticker-val" id="quoteSpread">—</span>
             </div>
         </div>
 
         <div class="header-status">
             <div class="status-badge" id="feedBadge">
                 <span class="dot dot-green"></span>
-                <span id="feedStatusText">فید فعال</span>
+                <span id="feedStatusText">فید زنده متصل نیست</span>
             </div>
             <div class="status-badge" id="sessionBadge">
                 <span class="dot dot-blue"></span>
-                <span id="currentSessionText">سشن: لندن / نیویورک</span>
+                <span id="currentSessionText">سشن: در انتظار داده</span>
             </div>
             <div class="status-badge" id="regimeBadge">
                 <span class="dot dot-purple"></span>
@@ -71,6 +71,12 @@
             </div>
         </div>
     </header>
+
+    <div class="market-source-strip" role="status" aria-live="polite">
+        <strong id="marketGateText">معاملات بسته — در انتظار قیمت واقعی و معتبر</strong>
+        <span id="dataSourceLabel">چارت: حالت نمایشی / تاریخی</span>
+        <span id="lastQuoteTime">آخرین قیمت معتبر: —</span>
+    </div>
 
     <!-- Top Stats Row -->
     <section class="stats-grid">
@@ -97,7 +103,7 @@
         <div class="stat-card">
             <div class="stat-title">نسخه فعال (Champion)</div>
             <div class="stat-value text-gold" id="championName">Baseline-V1</div>
-            <div class="stat-sub" id="championStats">امید ریاضی: R=+0.42</div>
+            <div class="stat-sub" id="championStats">بازده معتبر: تأیید نشده</div>
         </div>
         <div class="stat-card">
             <div class="stat-title">ناظر مستقل ریسک (Guardian)</div>
@@ -107,16 +113,21 @@
     </section>
 
     <!-- Navigation Bar -->
-    <nav class="nav-tabs">
-        <button class="nav-btn active" data-tab="tab-chart">📊 چارت تعاملی و سطوح ساختار</button>
-        <button class="nav-btn" data-tab="tab-ai-research">🧠 مرکز پژوهش هوشمند (AI Lab)</button>
-        <button class="nav-btn" data-tab="tab-positions">💼 معاملات باز و سفارش‌ها</button>
-        <button class="nav-btn" data-tab="tab-strategies">🎯 استراتژی‌ها و سیگنال‌ها</button>
-        <button class="nav-btn" data-tab="tab-bot">🤖 ربات معامله‌گر خودکار</button>
-        <button class="nav-btn" data-tab="tab-broker">🏦 کیف پول و بروکر مجازی</button>
-        <button class="nav-btn" data-tab="tab-backtest">📈 بکتست و مقایسه جامع</button>
-        <button class="nav-btn" data-tab="tab-calendar">📅 اخبار و تقویم کلان</button>
-        <button class="nav-btn" data-tab="tab-health">🔍 سلامت سیستم و لاگ‌ها</button>
+    <nav class="nav-tabs" aria-label="ناوبری اصلی">
+        <button class="nav-btn active" data-tab="tab-chart">📊 چارت و سشن‌ها</button>
+        <button class="nav-btn" data-tab="tab-positions">💼 معاملات مجازی</button>
+        <button class="nav-btn" data-tab="tab-ai-research">🧠 مرکز یادگیری</button>
+        <details class="nav-more">
+            <summary>ابزارهای بیشتر ▾</summary>
+            <div class="nav-more-grid">
+                <button class="nav-btn" data-tab="tab-strategies">🎯 استراتژی‌ها</button>
+                <button class="nav-btn" data-tab="tab-bot">🤖 ربات</button>
+                <button class="nav-btn" data-tab="tab-broker">🏦 حساب مجازی</button>
+                <button class="nav-btn" data-tab="tab-backtest">📈 بک‌تست</button>
+                <button class="nav-btn" data-tab="tab-calendar">📅 تقویم</button>
+                <button class="nav-btn" data-tab="tab-health">🔍 سلامت فید</button>
+            </div>
+        </details>
     </nav>
 
     <!-- MAIN VIEW CONTAINER -->
@@ -134,8 +145,9 @@
                             <button class="tf-btn" data-tf="1h">1h</button>
                         </div>
                         <div class="layer-toggles">
-                            <label><input type="checkbox" id="toggleLevels" checked> سطوح کلیدی (Asia/PDH/PDL)</label>
-                            <label><input type="checkbox" id="toggleTrades" checked> معاملات آزمایشی (Paper)</label>
+                            <label><input type="checkbox" id="toggleSessions" checked> محدوده سشن‌ها (امروز و روزهای قبل)</label>
+                            <label><input type="checkbox" id="toggleLevels"> خطوط سقف/کف</label>
+                            <label><input type="checkbox" id="toggleTrades"> معاملات بک‌تست (نه معاملات اجراشده)</label>
                             <label><input type="checkbox" id="toggleSignals"> سیگنال‌های ستاپ (اختیاری)</label>
                         </div>
                         <div class="replay-controls">
@@ -146,7 +158,10 @@
                     </div>
 
                     <!-- Chart Container -->
-                    <div id="chartContainer" class="chart-viewport"></div>
+                    <div id="chartContainer" class="chart-viewport">
+                        <div id="sessionOverlay" class="session-overlay" aria-hidden="true"></div>
+                    </div>
+                    <div class="chart-footnote">مستطیل‌ها: محدوده قیمت هر سشن • خطوط بالایی و پایینی: سقف و کف • هم‌پوشانی لندن/نیویورک: بنفش • معاملات خودکار فعلاً غیرفعال</div>
 
                     <!-- Chart Level Indicators -->
                     <div class="session-levels-bar">
@@ -193,7 +208,7 @@
                                 <label>حد سود (Take Profit):</label>
                                 <input type="number" id="orderTP" class="form-input" step="0.10" placeholder="اختیاری">
                             </div>
-                            <button type="submit" class="btn btn-primary btn-block" id="btnSubmitOrder">ثبت سفارش آزمایشی</button>
+                            <button type="submit" class="btn btn-primary btn-block" id="btnSubmitOrder" disabled title="نیازمند فید زنده معتبر">ثبت سفارش آزمایشی</button>
                         </form>
                     </div>
 
@@ -204,7 +219,7 @@
                             <div class="bot-state-display" id="botStateDisplay">حالت فعلی: فقط تحلیل</div>
                             <div class="bot-btn-group">
                                 <button class="btn btn-outline btn-sm" id="btnBotAnalysis">فقط تحلیل</button>
-                                <button class="btn btn-success btn-sm" id="btnBotAuto">ترید خودکار آزمایشی</button>
+                                <button class="btn btn-success btn-sm" id="btnBotAuto" disabled title="تأیید موتور استراتژی و منبع زنده لازم است">ترید خودکار آزمایشی</button>
                                 <button class="btn btn-danger btn-sm" id="btnBotPause">توقف اضطراری</button>
                             </div>
                         </div>
