@@ -30,6 +30,6 @@ jobs:
       - name: JavaScript syntax validation
         run: node --check static/js/dashboard.js
       - name: Git hook shell syntax validation
-        run: bash -n scripts/install-antigravity-hooks.sh scripts/antigravity-after-pull.sh
+        run: bash -n scripts/install-antigravity-hooks.sh scripts/antigravity-after-pull.sh scripts/antigravity-headless-review.sh
       - name: Unit and API regression suite
         run: python -m pytest -q
