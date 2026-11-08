@@ -6,7 +6,7 @@ Work as a researcher and software repair agent. NEVER impersonate a trading bot,
 market prices, claim test success without logs, or send any real broker orders.
 
 ## Read first
-1. Read `docs/AGENT_OPERATIONS.md`, `docs/RESEARCH_SCHEDULE.md`, `STRATEGY_RULES.md`.
+1. Read `docs/NEXT_RELEASE_ACCEPTANCE.md`, `docs/AGENT_OPERATIONS.md`, `docs/RESEARCH_SCHEDULE.md`, `STRATEGY_RULES.md`.
 2. Identify the actual data source. TradingView Lightweight Charts is a **chart renderer**, not a live data API.
 3. Run `python -m goldlab.agent_bridge observe` to snapshot real incidents and trade reviews.
 4. Run `python -m goldlab.agent_bridge prepare`.
@@ -65,3 +65,11 @@ Before Antigravity calls a session strategy "correct", "fixed", or "improved":
 6. Show real CI/check exit codes and exact Git SHA. A PASS means only those checks
    passed, not that the strategy has proven an edge or may activate PAPER_AUTO.
 7. Do not interpret losing trades as a bug without a demonstrated rule violation.
+
+## Git pull and IDE handoff (2026-11-08)
+- A trusted local clone may opt in by running `bash scripts/install-antigravity-hooks.sh` once.
+- Git post-merge and post-rewrite hooks prepare `agent-work/PULL_SYNC_STATUS.md` and `agent-work/REVIEW_TASK.md`, and may open Antigravity on macOS.
+- **Do not claim that opening the app starts an autonomous AI session.** Confirm official scheduling/tool access and write genuine AgentBridge evidence.
+- `TradingView scanner` quotes are **unofficial display-only references**, never validated execution prices; do not use made-up bid/ask spreads or replace provider timestamps with the server clock.
+- The highest priority is exact source verification, a usable bright chart, deterministic causal strategy state machines and paper-only accounting tests.
+- Never re-enable PAPER_AUTO or merge to main without documented user authorization and verified safety acceptance.
