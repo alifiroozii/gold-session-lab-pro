@@ -10,6 +10,7 @@ let isReplaying = false;
 let replayTimer = null;
 let currentMarketData = null;
 let activePriceLines = [];
+let sessionRectangles = [];
 
 // --- تابع جامع تبدیل تاریخ میلادی به تاریخ خورشیدی شمسی (Jalali / Solar Hijri) ---
 function toShamsiDateTime(dateInput, includeTime = true) {
@@ -48,6 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
     initWebSocket();
     setInterval(fetchBrokerData, 3000);
     setInterval(fetchBotData, 4000);
+    setInterval(fetchMarketStatus, 5000);
+    fetchMarketStatus();
 });
 
 // 1. Clock با نمایش تقویم شمسی و ساعت تهران
@@ -133,6 +136,7 @@ function initChart() {
     });
 
     window.addEventListener("resize", () => {
+        requestAnimationFrame(drawSessionBoxes);
         if (chart && container) {
             chart.applyOptions({ width: container.clientWidth });
         }
@@ -169,6 +173,7 @@ async function fetchMarketData() {
 function renderMarketData(data) {
     if (!data || !data.candles || data.candles.length === 0) return;
     currentMarketData = data;
+    sessionRectangles = data.session_boxes || [];
     currentCandles = data.candles;
     replayIndex = currentCandles.length;
 
@@ -184,10 +189,9 @@ function renderMarketData(data) {
 
     // Update Quote Box
     const lastBar = currentCandles[currentCandles.length - 1];
-    const bid = lastBar.close;
-    const ask = +(bid + 0.25).toFixed(2);
-    document.getElementById("quoteBid").innerText = bid.toFixed(2);
-    document.getElementById("quoteAsk").innerText = ask.toFixed(2);
+    const label = document.getElementById("dataSourceLabel");
+    if (label) label.textContent = "چارت: " + (data.data_source === "DEMO_CSV" ? "داده ساختگی آموزشی — غیرقابل معامله" : (data.data_source || "تاریخی / نامشخص"));
+    if (data.execution) updateExecutionBadge(data.execution);
 
     // Update Levels labels
     const stats = data.session_stats || {};
@@ -207,6 +211,7 @@ function renderMarketData(data) {
 
     // Render Clean Layers (Levels, Trades, Signals on Demand)
     updateChartLayers();
+    requestAnimationFrame(drawSessionBoxes);
 
     // Update Signals Table
     renderSignalsTable(data.signals || []);
@@ -227,6 +232,7 @@ function updateChartLayers() {
     const showSignals = document.getElementById("toggleSignals")?.checked || false;
     const showTrades = document.getElementById("toggleTrades")?.checked || false;
     const showLevels = document.getElementById("toggleLevels")?.checked || false;
+    requestAnimationFrame(drawSessionBoxes);
 
     // 1. Manage Horizontal Price Lines (Levels)
     activePriceLines.forEach(line => {
@@ -313,6 +319,88 @@ function updateChartLayers() {
 
     markers.sort((a, b) => a.time - b.time);
     candleSeries.setMarkers(markers);
+}
+
+// Draw exact price/time-bounded session boxes on the *real* candlestick chart.
+// Uses chart coordinates: not arbitrary HTML positioning.
+function drawSessionBoxes() {
+    const overlay = document.getElementById("sessionOverlay");
+    if (!overlay || !chart || !candleSeries) return;
+    overlay.replaceChildren();
+    if (!document.getElementById("toggleSessions")?.checked) return;
+    const bars = currentCandles || [];
+    if (!bars.length) return;
+    const palette = {
+        asia: ["#2c7be5", "rgba(44,123,229,.075)", "آسیا"],
+        london: ["#18a076", "rgba(24,160,118,.075)", "لندن"],
+        new_york: ["#db8b27", "rgba(219,139,39,.075)", "نیویورک"],
+        overlap: ["#a06ad4", "rgba(160,106,212,.075)", "همپوشانی"],
+    };
+    for (const box of sessionRectangles) {
+        const first = bars.find(c => c.time >= box.start && c.time <= box.end);
+        const last = bars.findLast ? bars.findLast(c => c.time >= box.start && c.time <= box.end)
+            : [...bars].reverse().find(c => c.time >= box.start && c.time <= box.end);
+        if (!first || !last) continue;
+        const a = chart.timeScale().timeToCoordinate(first.time);
+        const b = chart.timeScale().timeToCoordinate(last.time);
+        const hi = candleSeries.priceToCoordinate(box.high);
+        const lo = candleSeries.priceToCoordinate(box.low);
+        if ([a,b,hi,lo].some(v => v === null || !Number.isFinite(v))) continue;
+        const left = Math.min(a,b) - 3;
+        const top = Math.min(hi,lo);
+        const width = Math.abs(b-a) + 6;
+        const height = Math.abs(lo-hi);
+        if (width < 5 || height < 3) continue;
+        const [color,background,name] = palette[box.session] || palette.asia;
+        const rect = document.createElement("div");
+        rect.className = "session-box session-box-" + box.session;
+        rect.style.left = left + "px";
+        rect.style.top = top + "px";
+        rect.style.width = width + "px";
+        rect.style.height = height + "px";
+        rect.style.borderColor = color;
+        rect.style.background = background;
+        rect.style.opacity = box.completed ? "1" : ".65";
+        const label = document.createElement("span");
+        label.className = "session-box-label";
+        label.style.color = color;
+        label.textContent = name + " · " + box.date;
+        if (width > 66) rect.appendChild(label);
+        overlay.appendChild(rect);
+    }
+}
+
+function updateExecutionBadge(execution) {
+    const gate = document.getElementById("marketGateText");
+    if (gate) gate.textContent = execution.paper_orders_allowed
+        ? "قیمت زنده تأیید شده · سفارش دستی مجازی مجاز"
+        : "معامله جدید مسدود · " + (execution.reason || "بدون فید معتبر");
+    const when = document.getElementById("lastQuoteTime");
+    if (when) when.textContent = execution.quote_time
+        ? "آخرین قیمت معتبر: " + toShamsiDateTime(execution.quote_time)
+        : "آخرین قیمت معتبر: —";
+    const bid = document.getElementById("quoteBid");
+    const ask = document.getElementById("quoteAsk");
+    const spread = document.getElementById("quoteSpread");
+    if (bid) bid.textContent = execution.bid == null ? "—" : Number(execution.bid).toFixed(2);
+    if (ask) ask.textContent = execution.ask == null ? "—" : Number(execution.ask).toFixed(2);
+    if (spread) spread.textContent = execution.bid == null || execution.ask == null
+        ? "—" : "$" + (execution.ask-execution.bid).toFixed(2);
+    const feed = document.getElementById("feedStatusText");
+    if (feed) feed.textContent = execution.paper_orders_allowed ? "قیمت تأیید شده" : "فید زنده نامعتبر / بسته";
+    const manual = document.getElementById("btnSubmitOrder");
+    if (manual) manual.disabled = !execution.paper_orders_allowed;
+    const auto = document.getElementById("btnBotAuto");
+    // Auto trading is blocked until the next-bar causal bot logic is verified.
+    if (auto) auto.disabled = true;
+}
+async function fetchMarketStatus() {
+    try {
+        const res = await fetch("/api/market/status", {cache:"no-store"});
+        if (res.ok) updateExecutionBadge(await res.json());
+    } catch (_err) {
+        updateExecutionBadge({paper_orders_allowed:false,reason:"دسترسی به سرور قطع است"});
+    }
 }
 
 // 5. Switch Timeframe
@@ -587,6 +675,7 @@ function initForms() {
     document.getElementById("btnRunComparison")?.addEventListener("click", runStrategyComparison);
 
     // Chart Layer Toggles (Declutter)
+    document.getElementById("toggleSessions")?.addEventListener("change", updateChartLayers);
     document.getElementById("toggleSignals")?.addEventListener("change", updateChartLayers);
     document.getElementById("toggleTrades")?.addEventListener("change", updateChartLayers);
     document.getElementById("toggleLevels")?.addEventListener("change", updateChartLayers);
@@ -738,9 +827,7 @@ function initWebSocket() {
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             if (msg.type === "TICK") {
-                document.getElementById("quoteBid").innerText = msg.bid.toFixed(2);
-                document.getElementById("quoteAsk").innerText = msg.ask.toFixed(2);
-                document.getElementById("quoteSpread").innerText = `$${(msg.ask - msg.bid).toFixed(2)}`;
+                if (msg.verified === true) fetchMarketStatus();
             } else if (msg.type === "FILL") {
                 fetchBrokerData();
             }
@@ -756,7 +843,9 @@ function initWebSocket() {
 // 15. AI Research Center Controller (V3.0)
 document.addEventListener("DOMContentLoaded", () => {
     fetchResearchData();
+    fetchAntigravityActivity();
     setInterval(fetchResearchData, 6000);
+    setInterval(fetchAntigravityActivity, 10000);
 
     const btnHypo = document.getElementById("btnNewHypothesis");
     if (btnHypo) {
@@ -1035,6 +1124,51 @@ async function fetchResearchData() {
     } catch (e) {}
 }
 
+// Verified Antigravity activity. No fabricated success messages.
+function safeText(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+    }[ch]));
+}
+async function fetchAntigravityActivity() {
+    try {
+        const res = await fetch("/api/agent/status", {cache:"no-store"});
+        if (!res.ok) return;
+        const data = await res.json();
+        const connected = data.agent_status === "RECENT_ACTIVITY";
+        const badge = document.getElementById("agentConnectionStatus");
+        if (badge) badge.textContent = connected
+            ? "فعالیت اخیر ثبت شد · " + toShamsiDateTime(data.agent_last_activity)
+            : "Antigravity متصل نیست / فعالیت تازه‌ای ثبت نشده";
+        const pairs = [
+            ["agentOpenIncidents", data.open_incidents],
+            ["agentHypotheses", data.hypotheses_under_review],
+            ["agentProposals", data.pending_patch_proposals],
+            ["agentVerifiedFixes", data.verified_fixes],
+        ];
+        for (const [id,val] of pairs) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = String(val ?? "—");
+        }
+        const log = document.getElementById("agentActivityTimeline");
+        if (!log) return;
+        const events = data.events || [];
+        log.innerHTML = events.length ? events.slice(0, 20).map(e => `
+            <div class="agent-event">
+                <span class="agent-event-time">${safeText(toShamsiDateTime(e.timestamp))}</span>
+                <strong>${safeText(e.phase)}</strong>
+                <span>${safeText(e.subject)}</span>
+                <small>${safeText(e.actor)} · ${safeText(e.details)}</small>
+                ${e.evidence ? `<code>${safeText(e.evidence)}</code>` : ""}
+                ${e.verified ? "<em>مدرک ثبت‌شده ✓</em>" : "<em>هنوز تأیید نشده</em>"}
+            </div>`).join("")
+            : "هیچ فعالیت واقعی Antigravity ثبت نشده است؛ فقط پس از اجرای چرخه و ثبت شواهد نمایش داده می‌شود.";
+    } catch(_err) {
+        const badge = document.getElementById("agentConnectionStatus");
+        if (badge) badge.textContent = "خطا در خواندن وضعیت Agent";
+    }
+}
+
 // 16. Institutional Grids & Health Monitors Initializer
 document.addEventListener("DOMContentLoaded", () => {
     renderStrategiesGrid();
@@ -1076,11 +1210,11 @@ function renderHealthGrid() {
     if (!grid) return;
     const cards = [
         { title: "ترازنامه دفتر کل (Double-Entry Ledger)", val: "تایید شده (LEDGER_OK)", sub: "تطبیق ۱۰۰٪ موجودی با تراکنش‌های wallet_ledger", ok: true },
-        { title: "فید زنده قیمت طلا (XAUUSD Feed)", val: "برخط و فعال (WebSocket)", sub: "تیک ریت ۲.۰ ثانیه، بدون نشت داده آینده", ok: true },
+        { title: "فید زنده قیمت طلا", val: "در انتظار تأیید فید واقعی", sub: "دمو و کندل تاریخی، قیمت اجرایی نیستند.", ok: false },
         { title: "ناظر مستقل ریسک (Risk Guardian)", val: "محافظت سخت‌گیرانه (Active)", sub: "سقف افت روزانه ۲٪ | سقف ریسک هر معامله ۰.۵٪", ok: true },
-        { title: "سرپرست پژوهش چندروزه (Supervisor)", val: "پایدار و زمان‌بندی‌شده", sub: "صف کارهای ناهمگام در SQLite با ژورنال WAL", ok: true },
-        { title: "پایپلاین خوداصلاحی کد (Auto-Fix)", val: "دروازه تایید انسانی (Gated)", sub: "سطح ریسک بالا و متوسط نیازمند تایید کاربر", ok: true },
-        { title: "مدل یادگیری ماشین کیفیت معامله", val: "حالت سایه (Shadow Mode)", sub: "امتیازدهی احتمال موفقیت بدون مسدودسازی ورود", ok: true }
+        { title: "سرپرست پژوهش چندروزه", val: "زمان‌بندی فعال تأیید نشده", sub: "صف محلی وجود دارد؛ اتصال عامل جداگانه باید فعال شود.", ok: false },
+        { title: "پایپلاین اصلاح کد", val: "پیشنهاد و بازبینی؛ بدون اعمال خودکار", sub: "بدون Git diff و نتیجه آزمون معتبر، کد اصلی تغییر نمی‌کند.", ok: false },
+        { title: "مدل یادگیری ماشین", val: "حالت پژوهشی، اثبات‌نشده", sub: "نمره تا زمان آزمون کالیبراسیون احتمال برد نیست.", ok: false }
     ];
 
     grid.innerHTML = cards.map(c => `
