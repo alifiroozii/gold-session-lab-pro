@@ -14,6 +14,8 @@ def test_baseline_champion_seeded(test_db_path):
     assert champ is not None
     assert champ.is_champion is True
     assert champ.name == "Champion-Baseline-V1"
+    assert champ.total_trades == 0
+    assert champ.expectancy_r == 0
 
 
 def test_challenger_promotion_evaluation_criteria(test_db_path):
@@ -32,7 +34,7 @@ def test_challenger_promotion_evaluation_criteria(test_db_path):
     assert eval_weak["eligible"] is False
     assert eval_weak["checks"]["sample_size_ok"] is False
 
-    # 2. Strong challenger meeting all criteria
+    # 2. Even a strong-looking challenger cannot beat an unvalidated baseline.
     challenger_strong = mgr.register_version(
         name="Challenger-Alpha",
         is_champion=False,
@@ -44,8 +46,8 @@ def test_challenger_promotion_evaluation_criteria(test_db_path):
         p_value=0.02,
     )
     eval_strong = mgr.evaluate_challenger_promotion(challenger_strong.version_id)
-    assert eval_strong["eligible"] is True
-    assert eval_strong["checks"]["statistical_significance"] is True
+    assert eval_strong["eligible"] is False
+    assert "validated" in eval_strong["reason"]
 
 
 def test_promotion_requires_user_approval(test_db_path):
@@ -63,10 +65,7 @@ def test_promotion_requires_user_approval(test_db_path):
     res_fail = mgr.promote_challenger(challenger.version_id, user_confirmed=False)
     assert res_fail["success"] is False
 
-    # Succeeds with user confirmation
+    # Explicit approval alone does not establish statistical evidence.
     res_ok = mgr.promote_challenger(challenger.version_id, user_confirmed=True)
-    assert res_ok["success"] is True
-
-    new_champ = mgr.get_current_champion()
-    assert new_champ.version_id == challenger.version_id
-    assert new_champ.name == "Challenger-Candidate"
+    assert res_ok["success"] is False
+    assert mgr.get_current_champion().version_id != challenger.version_id
