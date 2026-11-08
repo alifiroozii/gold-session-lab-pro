@@ -28,6 +28,7 @@ from goldlab.calendar import EconomicEvent, MacroNewsCalendar
 from goldlab.diagnostics import DiagnosticsEngine
 from goldlab.engine import ResearchEngine
 from goldlab.guardian import IndependentRiskGuardian
+from goldlab.market_safety import OandaReadOnlyFeed, MarketQuote, execution_gate
 from goldlab.learning import MistakeAnalyzerAndHypothesisRegistry
 from goldlab.ml_model import MLTradeQualityModel
 from goldlab.paper_broker import OrderDirection, OrderStatus, OrderType, PaperBroker
@@ -66,6 +67,10 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Core Systems
 DB_PATH = str(DATA_DIR / "xauusd_lab.sqlite")
 engine = ResearchEngine(db_path=DB_PATH)
+market_feed = OandaReadOnlyFeed()
+verified_quote: Optional[MarketQuote] = None
+market_block_reason = "NO_VERIFIED_LIVE_QUOTE"
+engine.market_data_source = "DEMO_CSV"
 broker = PaperBroker(db_path=DB_PATH)
 bot = AutomatedPaperBot(account_id="ACC_DEFAULT", broker=broker, engine=engine, db_path=DB_PATH)
 backtester = BacktestingEngine(db_path=DB_PATH)
@@ -103,12 +108,23 @@ engine.calendar = MacroNewsCalendar(
 
 # Load demo dataset on startup
 DEMO_CSV = DATA_DIR / "demo_xauusd_1m.csv"
-if DEMO_CSV.exists():
+if market_feed.configured:
+    try:
+        candles = market_feed.historical_m1()
+        if candles:
+            engine.load_candles(candles, timeframe="5m")
+            engine.market_data_source = "OANDA_HISTORICAL_MID"
+            engine.run_pipeline()
+    except Exception:
+        # Credential failures must not convert demo candles to a live quote.
+        pass
+if not engine.current_candles and DEMO_CSV.exists():
     try:
         engine.load_from_csv(DEMO_CSV, timeframe="5m")
+        engine.market_data_source = "DEMO_CSV"
         engine.run_pipeline()
     except Exception as e:
-        print(f"Notice: Initial data load: {e}")
+        print(f"Notice: Initial demo load: {e}")
 
 
 # WebSocket connection manager
@@ -139,37 +155,61 @@ background_task: Optional[asyncio.Task] = None
 
 
 async def market_heartbeat_loop() -> None:
-    """Simulates live tick updates, ledger audit, and dispatches them over WebSocket."""
+    """Poll verified read-only OANDA prices; never replay old/demo data as live ticks."""
+    global verified_quote, market_block_reason
     counter = 0
     while True:
         try:
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(5.0)
             counter += 1
-            if engine.current_candles:
-                last_bar = engine.current_candles[-1]
-                bid = last_bar.close
-                ask = round(bid + 0.25, 2)
-                broker.on_tick(bid, ask)
-
-                # Periodic Ledger Audit & Supervisor health check every 15 beats (~30s)
-                ledger_ok = True
-                if counter % 15 == 0:
-                    ok, _ = guardian.audit_ledger_invariance("ACC_DEFAULT", broker)
-                    ledger_ok = ok
-                    supervisor.run_health_loop(broker)
-
+            new_quote = None
+            if market_feed.configured:
+                try:
+                    new_quote = await asyncio.to_thread(market_feed.latest_quote)
+                except Exception:
+                    market_block_reason = "LIVE_FEED_UNAVAILABLE"
+            ok, reason = execution_gate(new_quote)
+            verified_quote = new_quote if ok else None
+            market_block_reason = reason if new_quote is not None else (
+                "LIVE_FEED_UNAVAILABLE" if market_feed.configured else "OANDA_NOT_CONFIGURED"
+            )
+            if verified_quote is not None:
+                broker.on_tick(verified_quote.bid, verified_quote.ask,
+                               timestamp=verified_quote.timestamp)
+                # Refresh actual historical candles separately from authenticated quotes.
+                if counter % 12 == 0:
+                    try:
+                        bars = await asyncio.to_thread(market_feed.historical_m1)
+                        if bars:
+                            engine.load_candles(bars, timeframe=engine.current_timeframe)
+                            engine.market_data_source = "OANDA_HISTORICAL_MID"
+                            engine.run_pipeline()
+                    except Exception:
+                        pass
                 await ws_manager.broadcast_json({
-                    "type": "TICK",
-                    "bid": bid,
-                    "ask": ask,
-                    "ledger_ok": ledger_ok,
+                    "type": "TICK", "bid": verified_quote.bid, "ask": verified_quote.ask,
+                    "source": verified_quote.source,
+                    "timestamp": verified_quote.timestamp.isoformat(),
+                    "verified": True,
+                })
+            else:
+                # Closed market or unavailable source: do NOT send synthetic ticks.
+                if bot.state == BotState.PAPER_AUTO:
+                    bot.set_state(BotState.DATA_DISCONNECTED)
+                await ws_manager.broadcast_json({
+                    "type": "MARKET_STATUS", "status": market_block_reason,
+                    "verified": False,
                     "timestamp": datetime.now(TZ_UTC).isoformat(),
                 })
+            if counter % 6 == 0:
+                supervisor.run_health_loop(broker)
+                guardian.audit_ledger_invariance("ACC_DEFAULT", broker)
         except asyncio.CancelledError:
             break
         except Exception as e:
+            verified_quote = None
+            market_block_reason = "LIVE_FEED_ERROR"
             diagnostics.categorize_exception(e, {"source": "market_heartbeat_loop"})
-            print(f"Error in heartbeat loop: {e}")
 
 
 @app.on_event("startup")
@@ -185,6 +225,28 @@ async def shutdown_event() -> None:
     global background_task
     if background_task:
         background_task.cancel()
+
+
+def get_execution_status() -> Dict[str, Any]:
+    allowed, reason = execution_gate(verified_quote)
+    return {
+        "market_open": allowed,
+        "paper_orders_allowed": allowed,
+        "paper_auto_allowed": False,
+        "reason": reason if not allowed else "VERIFIED_LIVE_PRICE",
+        "quote_source": verified_quote.source if verified_quote else None,
+        "quote_time": verified_quote.timestamp.isoformat() if verified_quote else None,
+        "bid": verified_quote.bid if verified_quote else None,
+        "ask": verified_quote.ask if verified_quote else None,
+        "chart_source": engine.market_data_source,
+        "provider_configured": market_feed.configured,
+        "historical_data_is_executable": False,
+    }
+
+
+@app.get("/api/market/status")
+async def get_market_status() -> Dict[str, Any]:
+    return get_execution_status()
 
 
 # --- Pydantic Request Models ---
@@ -248,7 +310,11 @@ async def get_market_data(timeframe: Optional[str] = None) -> Dict[str, Any]:
         engine.current_timeframe = timeframe
         engine.current_candles = engine.data_pipeline.aggregate_candles(engine.candles_1m, timeframe)
         engine.run_pipeline()
-    return engine.get_dashboard_payload()
+    payload = engine.get_dashboard_payload()
+    payload["data_source"] = engine.market_data_source
+    payload["execution"] = get_execution_status()
+    payload["session_boxes"] = engine.session_mgr.calculate_session_boxes(engine.current_candles)
+    return payload
 
 
 @app.post("/api/market/timeframe")
@@ -358,9 +424,11 @@ async def close_position_endpoint(pos_id: str) -> Dict[str, Any]:
     pos = broker.positions.get(pos_id)
     if not pos or pos.status.value != "OPEN":
         raise HTTPException(status_code=404, detail="موقعیت باز یافت نشد.")
-    bid = engine.current_candles[-1].close if engine.current_candles else pos.entry_price
-    ask = round(bid + 0.25, 2)
-    exit_p = bid if pos.direction == OrderDirection.BUY else ask
+    allowed, reason = execution_gate(verified_quote)
+    if not allowed:
+        raise HTTPException(status_code=409, detail=f"Market close blocked: {reason}")
+    assert verified_quote is not None
+    exit_p = verified_quote.bid if pos.direction == OrderDirection.BUY else verified_quote.ask
     closed_pos = broker.close_position(pos_id, exit_p, reason="MANUAL_CLOSE")
 
     # Trigger post-trade autopsy
@@ -406,8 +474,10 @@ async def submit_order_endpoint(req: OrderRequest) -> Dict[str, Any]:
     direction = OrderDirection(req.direction.upper())
     order_type = OrderType(req.order_type.upper())
 
-    bid = engine.current_candles[-1].close if engine.current_candles else 2650.0
-    ask = round(bid + 0.25, 2)
+    allowed, reason = execution_gate(verified_quote)
+    if not allowed:
+        raise HTTPException(status_code=409, detail=f"Order blocked: {reason}")
+    assert verified_quote is not None
 
     try:
         order = broker.submit_order(
@@ -418,8 +488,8 @@ async def submit_order_endpoint(req: OrderRequest) -> Dict[str, Any]:
             target_price=req.target_price,
             sl_price=req.sl_price,
             tp_price=req.tp_price,
-            current_bid=bid,
-            current_ask=ask,
+            current_bid=verified_quote.bid,
+            current_ask=verified_quote.ask,
         )
         return {"status": "success", "order_id": order.order_id, "order_status": order.status.value}
     except Exception as e:
@@ -480,6 +550,12 @@ async def get_bot_status() -> Dict[str, Any]:
 async def set_bot_state_endpoint(req: BotStateRequest) -> Dict[str, str]:
     try:
         new_state = BotState(req.state)
+        if new_state == BotState.PAPER_AUTO:
+            allowed, reason = execution_gate(verified_quote)
+            if not allowed:
+                raise HTTPException(status_code=409, detail=f"Paper auto blocked: {reason}")
+            # No automatic entries until causal next-bar strategy execution is validated.
+            raise HTTPException(status_code=409, detail="PAPER_AUTO_UNVERIFIED: strategy runtime has not passed execution tests.")
         bot.set_state(new_state)
         return {"status": "success", "new_state": bot.state.value}
     except Exception as e:
