@@ -127,7 +127,7 @@
         </div>
         <div class="stat-card">
             <div class="stat-title">ناظر مستقل ریسک (Guardian)</div>
-            <div class="stat-value text-blue" id="guardianStatus">فعال و ایمن</div>
+            <div class="stat-value text-blue" id="guardianStatus">در انتظار ممیزی</div>
             <div class="stat-sub" id="guardianSub">افت روزانه: 0.0% / 2.0%</div>
         </div>
     </section>
@@ -180,9 +180,15 @@
                     <!-- Single Primary Chart with ICT Sessions Overlay -->
                     <div id="chartContainer" class="chart-viewport">
                         <div id="sessionOverlay" class="session-overlay" aria-hidden="true"></div>
+                        <div id="chartEmptyState" class="chart-empty-state" role="status">
+                            <div class="chart-empty-glyph" aria-hidden="true">◇</div>
+                            <strong>چارت XAU/USD — منتظر داده واقعی</strong>
+                            <p class="chart-empty-message">برای مشاهده کندل‌های معتبر، اتصال ارائه‌دهندهٔ دادهٔ مجاز را در مک راه‌اندازی کنید. داده ساختگی به‌طور خودکار جایگزین نمی‌شود.</p>
+                            <small>نماد مرجع: OANDA:XAUUSD • کندل و مظنه از یک فید نیستند مگر منبع آن‌ها تأیید شود</small>
+                        </div>
                     </div>
                     <div class="chart-footnote" id="chartFootnote">
-                        مستطیل‌ها: محدوده قیمت هر سشن (آسیا: آبی • لندن: سبز • نیویورک: نارنجی • هم‌پوشانی: بنفش) • خط زنده: قیمت لحظه‌ای تریدینگ‌ویو
+                        محدودهٔ آسیا: ۲۰:۰۰ تا ۰۰:۰۰ نیویورک (پژوهشی) • لندن: سبز • نیویورک: نارنجی • هم‌پوشانی: بنفش • خط قیمت فقط از مظنهٔ معتبر بروکر، نه اسکنر TradingView
                     </div>
 
                     <!-- Chart Level Indicators -->
