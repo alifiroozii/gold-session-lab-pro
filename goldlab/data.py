@@ -208,13 +208,13 @@ class DataPipeline:
             )
             conn.commit()
 
-    def aggregate_candles(self, candles_1m: List[Candle], timeframe: str) -> List[Candle]:
+    def aggregate_candles(self, candles_1m: List[Candle], timeframe: str, *, require_complete: bool = False) -> List[Candle]:
         """
         Deterministically aggregates 1m candles into 5m, 15m, or 1h candles.
         Prevents lookahead leakage by strictly binning based on left-closed intervals.
         """
         if not candles_1m or timeframe == "1m":
-            return candles_1m
+            return [c for c in candles_1m if c.is_closed] if require_complete else candles_1m
 
         freq_map = {"5m": "5min", "15m": "15min", "1h": "1h"}
         if timeframe not in freq_map:
@@ -228,16 +228,31 @@ class DataPipeline:
                 "low": c.low,
                 "close": c.close,
                 "volume": c.volume,
+                "is_closed": bool(c.is_closed),
             }
             for c in candles_1m
         ]
         df = pd.DataFrame(data).set_index("timestamp")
 
+        if require_complete:
+            # Incomplete last bins and interrupted bins must not become closed
+            # 5m/15m/1h decision candles. This mode is only for provider M1.
+            if any(c.timestamp.tzinfo is None or not c.is_closed for c in candles_1m):
+                raise ValueError("Live aggregation requires timezone-aware completed M1 candles")
+            if any(c.timestamp.second or c.timestamp.microsecond for c in candles_1m):
+                raise ValueError("Live M1 candle timestamps must align to full minutes")
+            if len(df.index.unique()) != len(df.index):
+                raise ValueError("Duplicate M1 timestamps in provider data")
+
         resampled = (
             df.resample(freq_map[timeframe], closed="left", label="left")
-            .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+            .agg({"open": "first", "high": "max", "low": "min", "close": "last",
+                  "volume": "sum", "is_closed": "sum"})
             .dropna()
         )
+        if require_complete:
+            needed = {"5m": 5, "15m": 15, "1h": 60}[timeframe]
+            resampled = resampled[resampled["is_closed"] == needed]
 
         aggregated: List[Candle] = []
         for ts, row in resampled.iterrows():
