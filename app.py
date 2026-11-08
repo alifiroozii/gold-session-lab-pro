@@ -40,6 +40,7 @@ from goldlab.ml_model import MLTradeQualityModel
 from goldlab.paper_broker import OrderDirection, OrderStatus, OrderType, PaperBroker
 from goldlab.promotion import ChampionChallengerManager
 from goldlab.regime import MarketRegimeMonitor
+from goldlab.review_journal import DecisionJournal
 from goldlab.supervisor import JobType, ResearchSupervisor
 
 TZ_UTC = timezone.utc
@@ -87,6 +88,7 @@ regime_monitor = MarketRegimeMonitor()
 diagnostics = DiagnosticsEngine(db_path=DB_PATH)
 autofix = SafeAutoFixEngine(db_path=DB_PATH)
 agent_bridge = AgentBridge(db_path=DB_PATH)
+decision_journal = DecisionJournal(db_path=DB_PATH)
 learning = MistakeAnalyzerAndHypothesisRegistry(db_path=DB_PATH)
 ml_model = MLTradeQualityModel(db_path=DB_PATH, shadow_mode=True)
 promotion = ChampionChallengerManager(db_path=DB_PATH)
@@ -164,6 +166,18 @@ stream_task: Optional[asyncio.Task] = None
 
 
 async def _broadcast_market_unavailable(reason: str) -> None:
+    lesson = decision_journal.record_block(reason, evidence="market_execution_gate")
+    if lesson:
+        agent_bridge.record(
+            phase="OBSERVED", actor="RUNTIME",
+            subject="Market safety blocked: " + reason,
+            details=lesson["guidance"], evidence=lesson["event_id"],
+        )
+        await asyncio.to_thread(agent_bridge.write_handoff)
+        await ws_manager.broadcast_json({
+            "type": "AGENT_OBSERVATIONS", "count": 1,
+            "timestamp": datetime.now(TZ_UTC).isoformat(),
+        })
     await ws_manager.broadcast_json({
         "type": "MARKET_STATUS", "status": reason, "verified": False,
         "timestamp": datetime.now(TZ_UTC).isoformat(),
@@ -722,6 +736,17 @@ async def get_calendar_events() -> Dict[str, Any]:
 @app.get("/api/agent/status")
 async def get_agent_status() -> Dict[str, Any]:
     return agent_bridge.state()
+
+
+@app.get("/api/agent/advice")
+async def get_agent_advice(limit: int = 15) -> Dict[str, Any]:
+    """Observed next-time safety advice; deterministic, NOT claimed AI learning."""
+    return {
+        "kind": "DETERMINISTIC_SAFETY_RULES_NOT_AI_PREDICTIONS",
+        "items": decision_journal.recent(limit),
+        "paper_auto_enabled": False,
+        "antigravity_autonomous_agent_attached": False,
+    }
 
 
 # --- AI Research Supervisor Endpoints ---
