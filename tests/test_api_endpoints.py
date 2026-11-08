@@ -88,17 +88,22 @@ def test_tradingview_quote_endpoint() -> None:
     res = client.get("/api/tradingview/quote")
     assert res.status_code == 200
     data = res.json()
-    assert data["status"] in ("SUCCESS", "UNAVAILABLE")
-    if data["status"] == "SUCCESS":
+    assert data["status"] in ("REFERENCE_ONLY", "UNAVAILABLE")
+    if data["status"] == "REFERENCE_ONLY":
         q = data["quote"]
         assert q["symbol"] == "XAU/USD"
         assert q["price"] > 0
-        assert q["bid"] > 0
-        assert q["ask"] >= q["bid"]
+        assert q["verified_for_execution"] is False
+        assert q["data_role"] == "REFERENCE_ONLY"
+        assert "bid" not in q and "ask" not in q
         assert "source" in q
 
 
-def test_load_demo_endpoint() -> None:
+def test_load_demo_endpoint(monkeypatch) -> None:
+    monkeypatch.delenv("GOLDLAB_ENABLE_DEMO_REPLAY", raising=False)
+    blocked = client.post("/api/market/load-demo")
+    assert blocked.status_code == 403
+    monkeypatch.setenv("GOLDLAB_ENABLE_DEMO_REPLAY", "1")
     res = client.post("/api/market/load-demo")
     assert res.status_code == 200
     data = res.json()
