@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from goldlab.diagnostics import DiagnosticsEngine
 from goldlab.guardian import IndependentRiskGuardian
+from goldlab.jalali import format_jalali_datetime
 from goldlab.learning import MistakeAnalyzerAndHypothesisRegistry
 from goldlab.paper_broker import PaperBroker
 from goldlab.promotion import ChampionChallengerManager
@@ -259,8 +260,10 @@ class ResearchSupervisor:
         hypotheses = self.learning.list_hypotheses(limit=5)
         incidents = self.diagnostics.get_recent_incidents(limit=5)
 
-        markdown_content = f"""# گزارش جامع روزانه آزمایشگاه خودکار طلا — {date_str}
-**تاریخ گزارش:** {now_dt.strftime("%Y-%m-%d %H:%M:%S UTC")}
+        shamsi_date = format_jalali_datetime(now_dt)
+        markdown_content = f"""# گزارش جامع روزانه آزمایشگاه خودکار طلا — {shamsi_date} ({date_str})
+**تاریخ شمسی گزارش:** {shamsi_date}
+**زمان میلادی UTC:** {now_dt.strftime("%Y-%m-%d %H:%M:%S UTC")}
 **وضعیت سیستم:** عملیاتی و پایدار (Local macOS)
 **نسخه استراتژی فعال (Champion):** {champ_name} (امید ریاضی: R={champ_r:.2f})
 
