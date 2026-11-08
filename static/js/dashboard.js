@@ -12,6 +12,8 @@ let currentMarketData = null;
 let activePriceLines = [];
 let sessionRectangles = [];
 let liveQuoteLine = null;
+let chartHasFittedOnce = false;
+let chartRenderedTimeframe = null;
 // --- چارت واحد تحلیلی سشن‌ها و سطوح معاملاتی طلا ---
 window.switchChartMode = function(_mode) {
     // چارت واحد به عنوان تنها چارت اصلی فعال است
@@ -212,21 +214,26 @@ function initChart() {
 // 4. Market Data Loader
 async function fetchMarketData() {
     try {
-        let res = await fetch(`/api/market?timeframe=${currentTimeframe}`);
-        if (!res.ok) return;
-        let data = await res.json();
-        if (!data.candles || data.candles.length === 0) {
-            const loadRes = await fetch("/api/market/load-demo", { method: "POST" });
-            if (loadRes.ok) {
-                res = await fetch(`/api/market?timeframe=${currentTimeframe}`);
-                if (res.ok) data = await res.json();
-            }
-        }
+        const res = await fetch(`/api/market?timeframe=${encodeURIComponent(currentTimeframe)}`, {
+            cache: "no-store"
+        });
+        if (!res.ok) throw new Error("Market API HTTP " + res.status);
+        const data = await res.json();
+        // NEVER silently load the synthetic demo CSV when verified data
+        // is missing. An empty, honestly labeled chart is safer.
         renderMarketData(data);
     } catch (err) {
-        console.error("Error fetching market data:", err);
+        console.error("Market feed unavailable:", err);
+        const empty = document.getElementById("chartEmptyState");
+        if (empty) {
+            empty.hidden = false;
+            const status = empty.querySelector(".chart-empty-message");
+            if (status) status.textContent =
+                "داده واقعی قابل دریافت نیست. اتصال فید را بررسی کنید؛ هیچ کندل ساختگی جایگزین نخواهد شد.";
+        }
     }
 }
+
 
 function renderMarketData(data) {
     if (!data) return;
@@ -243,10 +250,14 @@ function renderMarketData(data) {
         currentCandles = [];
         sessionRectangles = [];
         if (candleSeries) candleSeries.setData([]);
+        const empty = document.getElementById("chartEmptyState");
+        if (empty) empty.hidden = false;
         removeLiveQuoteLine();
         requestAnimationFrame(drawSessionBoxes);
         return;
     }
+    const empty = document.getElementById("chartEmptyState");
+    if (empty) empty.hidden = true;
     currentMarketData = data;
     sessionRectangles = data.session_boxes || [];
     currentCandles = data.candles;
@@ -261,7 +272,12 @@ function renderMarketData(data) {
         close: c.close
     }));
     candleSeries.setData(chartBars);
-    try { chart.timeScale().fitContent(); } catch (_e) {}
+    // Do not reset the user's zoom/pan every time a polling request arrives.
+    if (!chartHasFittedOnce || chartRenderedTimeframe !== currentTimeframe) {
+        try { chart.timeScale().fitContent(); } catch (_e) {}
+        chartHasFittedOnce = true;
+        chartRenderedTimeframe = currentTimeframe;
+    }
 
     // Update Quote Box
     const lastBar = currentCandles[currentCandles.length - 1];
