@@ -29,35 +29,25 @@ async function fetchTradingViewQuote() {
     } catch (_err) {}
 }
 
+// Scanner quotes are unverified, display-only reference observations.
+// Never invent Bid/Ask or spread and NEVER pass scanner values into the paper broker.
 function handleTradingViewQuote(quote) {
-    if (!quote || !quote.price) return;
-
-    // 1. به‌روزرسانی قیمت لحظه‌ای تریدینگ‌ویو در هدر
-    const tvPriceEl = document.getElementById("tvLivePrice");
-    if (tvPriceEl) {
-        const prevPrice = parseFloat(tvPriceEl.dataset.prevPrice || quote.price);
-        tvPriceEl.textContent = "$" + quote.price.toFixed(2);
-        if (quote.price > prevPrice) {
-            tvPriceEl.className = "ticker-val text-green font-weight-bold";
-        } else if (quote.price < prevPrice) {
-            tvPriceEl.className = "ticker-val text-red font-weight-bold";
-        }
-        tvPriceEl.dataset.prevPrice = quote.price;
+    const price = Number(quote?.price);
+    const reference = document.getElementById("tvLivePrice");
+    if (!reference || !Number.isFinite(price) || price <= 0) {
+        if (reference) reference.textContent = "نامعتبر / در دسترس نیست";
+        return;
     }
-
-    // 2. در صورت نبود کوت مستقیم بروکر، اعداد Bid/Ask/Spread هدر از تریدینگ‌ویو تغذیه می‌شوند
-    const quoteBidEl = document.getElementById("quoteBid");
-    const quoteAskEl = document.getElementById("quoteAsk");
-    const quoteSpreadEl = document.getElementById("quoteSpread");
-    if (quoteBidEl && (quoteBidEl.textContent === "—" || quoteBidEl.dataset.source === "tv")) {
-        quoteBidEl.textContent = quote.bid.toFixed(2);
-        quoteBidEl.dataset.source = "tv";
-        if (quoteAskEl) quoteAskEl.textContent = quote.ask.toFixed(2);
-        if (quoteSpreadEl) quoteSpreadEl.textContent = quote.spread.toFixed(2);
+    const age = quote.quote_age_seconds;
+    if (!Number.isFinite(Number(age)) || Number(age) > 30 || Number(age) < -5) {
+        reference.textContent = "قدیمی / غیرقابل اتکا";
+        reference.title = "TradingView scanner quote has no verified fresh provider timestamp";
+        return;
     }
-
-    // 3. ترسیم خط قیمت زنده تریدینگ‌ویو روی چارت سشن‌ها
-    updateLiveQuoteLine(quote.bid, quote.ask, "قیمت زنده TV: $" + quote.price.toFixed(2));
+    reference.textContent = price.toFixed(2) + " · مرجع غیررسمی";
+    reference.title = "منبع: " + (quote.source || "SCANNER_UNVERIFIED") +
+        " | نماد: " + (quote.ticker || "نامشخص") +
+        " | قابل استفاده برای معامله: خیر";
 }
 
 // --- تابع جامع تبدیل تاریخ میلادی به تاریخ خورشیدی شمسی (Jalali / Solar Hijri) ---
@@ -293,10 +283,10 @@ function renderMarketData(data) {
 
     // Update Metrics
     if (data.metrics) {
-        document.getElementById("stratWinRate").innerText = data.metrics.win_rate_pct ? `${data.metrics.win_rate_pct}%` : "-";
-        document.getElementById("stratPF").innerText = `فاکتور سود: ${data.metrics.profit_factor ?? "-"}`;
-        document.getElementById("stratExpectancy").innerText = `${data.metrics.expectancy_r ?? 0.0} R`;
-        document.getElementById("stratMaxDD").innerText = `حداکثر افت: ${data.metrics.max_drawdown_r ?? 0.0} R`;
+        if (document.getElementById("stratWinRate")) document.getElementById("stratWinRate").innerText = data.metrics.win_rate_pct ? `${data.metrics.win_rate_pct}%` : "-";
+        if (document.getElementById("stratPF")) document.getElementById("stratPF").innerText = `فاکتور سود: ${data.metrics.profit_factor ?? "-"}`;
+        if (document.getElementById("stratExpectancy")) document.getElementById("stratExpectancy").innerText = `${data.metrics.expectancy_r ?? 0.0} R`;
+        if (document.getElementById("stratMaxDD")) document.getElementById("stratMaxDD").innerText = `حداکثر افت: ${data.metrics.max_drawdown_r ?? 0.0} R`;
         document.getElementById("totalTradesCount").innerText = `تعداد معاملات: ${data.metrics.total_trades ?? 0}`;
     }
 }
