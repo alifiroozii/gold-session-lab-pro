@@ -82,7 +82,19 @@ class ChampionChallengerManager:
             )
             conn.commit()
 
-        # Seed initial Champion if empty
+        # Remove exactly the fabricated legacy seed metrics; never touch real results.
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                UPDATE strategy_versions
+                   SET total_trades=0, win_rate=0, expectancy_r=0,
+                       max_drawdown_pct=0, sharpe_ratio=0, p_value_vs_champion=1,
+                       notes='UNVALIDATED_BASELINE: requires real backtest evidence'
+                 WHERE name='Champion-Baseline-V1' AND total_trades=50
+                   AND win_rate=54 AND expectancy_r=0.42
+                   AND max_drawdown_pct=1.4 AND sharpe_ratio=1.35
+                   AND notes='نسخه مبنای اولیه و فعال در سیستم معاملاتی آزمایشی'
+            """)
+            conn.commit()
         self._ensure_baseline_champion()
 
     def _ensure_baseline_champion(self) -> None:
@@ -98,12 +110,12 @@ class ChampionChallengerManager:
                 name="Champion-Baseline-V1",
                 is_champion=True,
                 config=baseline_config,
-                total_trades=50,
-                win_rate=54.0,
-                expectancy_r=0.42,
-                max_drawdown_pct=1.4,
-                sharpe_ratio=1.35,
-                notes="نسخه مبنای اولیه و فعال در سیستم معاملاتی آزمایشی",
+                total_trades=0,
+                win_rate=0.0,
+                expectancy_r=0.0,
+                max_drawdown_pct=0.0,
+                sharpe_ratio=0.0,
+                notes="UNVALIDATED_BASELINE: requires real backtest evidence",
             )
 
     def register_version(
@@ -182,6 +194,8 @@ class ChampionChallengerManager:
         champ = self.get_current_champion()
         if not champ:
             return {"eligible": False, "reason": "No active champion found."}
+        if champ.total_trades < 30 or "UNVALIDATED" in champ.notes:
+            return {"eligible": False, "reason": "Champion has no validated historical evidence."}
 
         challenger = self.get_version(challenger_id)
         if not challenger:
@@ -223,6 +237,13 @@ class ChampionChallengerManager:
             return {
                 "success": False,
                 "message": "ارتقای نسخه رقیب به قهرمان (Champion) نیازمند تایید صریح کاربر است.",
+            }
+        evaluation = self.evaluate_challenger_promotion(challenger_id)
+        if not evaluation.get("eligible"):
+            return {
+                "success": False,
+                "message": "ارزیابی مستقل کافی برای ارتقای استراتژی وجود ندارد.",
+                "evaluation": evaluation,
             }
 
         champ = self.get_current_champion()
