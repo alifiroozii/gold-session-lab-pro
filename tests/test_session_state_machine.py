@@ -114,3 +114,30 @@ def test_state_machine_full_causal_lifecycle(tmp_path):
     with sqlite3.connect(db_file) as conn:
         count = conn.execute("SELECT count(*) FROM strategy_state_transitions").fetchone()[0]
         assert count >= 8
+
+
+
+def test_finalizing_asia_range_does_not_include_first_outside_bar(tmp_path):
+    sm = SessionTradingStateMachine(db_path=str(tmp_path / "range.sqlite"))
+    c20 = _make_candle(
+        datetime(2026, 11, 2, 20, 0, tzinfo=TZ_NY),
+        4400, 4405, 4395, 4401,
+    )
+    c23 = _make_candle(
+        datetime(2026, 11, 2, 23, 55, tzinfo=TZ_NY),
+        4401, 4408, 4392, 4402,
+    )
+    sm.process_candle(c20, [])
+    sm.process_candle(c23, [c20])
+    assert sm.ref_high == 4408
+    assert sm.ref_low == 4392
+    # The 00:05 bar is NOT part of the NY 20:00–00:00 range.
+    # Its huge spike and dump MUST NOT rewrite the completed range.
+    c00 = _make_candle(
+        datetime(2026, 11, 3, 0, 5, tzinfo=TZ_NY),
+        4402, 4450, 4350, 4400,
+    )
+    sm.process_candle(c00, [c20, c23], session_stats={"asia_complete": True})
+    assert sm.current_state == SessionStrategyState.RANGE_FINALIZED
+    assert sm.ref_high == 4408
+    assert sm.ref_low == 4392
