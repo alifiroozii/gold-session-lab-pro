@@ -60,7 +60,10 @@ usable UX, causal strategy behavior or connection to an unattended AI model.
 - Run browser screenshots and interaction checks for 1440, 1024 and 390px widths.
 
 ### Antigravity + pull
-- On a trusted macOS clone, run `bash scripts/install-antigravity-hooks.sh` ONCE.
+- On a trusted macOS clone, run `bash scripts/install-antigravity-hooks.sh` ONCE to generate evidence/open the IDE on git pull.
+- For an actual **read-only AI invocation after pull**, first install and authenticate the official Antigravity CLI (`agy`), then run `bash scripts/install-antigravity-hooks.sh --with-agent` once. This explicitly opts in to `agy -p` execution after subsequent pull/merge/rebase.
+- The opt-in headless review runs in plan/sandbox mode, logs its response under `agent-work/`, and only records recent Antigravity activity after verifying a successful CLI response. It never fixes code, merges, trades or alters risk policy automatically.
+- A one-shot read-only post-pull review is not a continuous unattended supervisor. For periodic AI investigations, use supported Antigravity `/schedule` or persistent sidecar tasks and restrict permissions. Verify version and available entitlement first.
   Post-merge/post-rewrite hooks will prepare local evidence and may open the IDE.
 - Merely opening Antigravity is NOT a connected AI runtime. Confirm its actual
   supported automation interface before claiming autonomous multi-day activity.
