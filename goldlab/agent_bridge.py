@@ -113,6 +113,47 @@ class AgentBridge:
             "events": events[:30],
         }
 
+    def observe_local_issues(self) -> int:
+        """Capture *real* incidents/autopsies once, without claiming AI analysis."""
+        created = 0
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_seen_sources (
+                    kind TEXT NOT NULL, source_id TEXT NOT NULL,
+                    PRIMARY KEY (kind, source_id)
+                )
+            """)
+            tables = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )}
+            sources = []
+            if "diagnostics_incidents" in tables:
+                sources.extend(("INCIDENT", dict(row)) for row in conn.execute(
+                    "SELECT incident_id AS id, title, category AS classification"
+                    " FROM diagnostics_incidents WHERE resolved=0 ORDER BY created_at DESC LIMIT 100"
+                ))
+            if "trade_autopsies" in tables:
+                sources.extend(("AUTOPSY", dict(row)) for row in conn.execute(
+                    "SELECT autopsy_id AS id, trade_id AS title, verdict AS classification"
+                    " FROM trade_autopsies ORDER BY created_at DESC LIMIT 100"
+                ))
+        for kind, payload in sources:
+            with sqlite3.connect(self.db_path) as conn:
+                updated = conn.execute(
+                    "INSERT OR IGNORE INTO agent_seen_sources(kind, source_id) VALUES (?, ?)",
+                    (kind, payload["id"]),
+                ).rowcount == 1
+            if updated:
+                self.record(
+                    phase="OBSERVED", actor="RUNTIME",
+                    subject=f"{kind}: {payload['title']}"[:160],
+                    details=f"Recorded {payload['classification']}; requires independent review.",
+                    evidence=str(payload["id"]), verified=False,
+                )
+                created += 1
+        return created
+
     def write_handoff(self, path: str = "agent-work/REVIEW_TASK.md") -> str:
         """Creates an evidence bundle Antigravity can consume in the opened workspace."""
         state = self.state()
@@ -175,6 +216,7 @@ def main() -> None:
     ev.add_argument("--verified", action="store_true")
     ev.add_argument("--actor", choices=sorted(ACTORS), default="ANTIGRAVITY")
     subs.add_parser("status")
+    subs.add_parser("observe")
     args = parser.parse_args()
     bridge = AgentBridge(db_path=args.db)
     if args.command == "prepare":
@@ -185,6 +227,8 @@ def main() -> None:
             evidence=args.evidence, git_ref=args.git_ref, actor=args.actor,
             verified=args.verified,
         ), ensure_ascii=False))
+    elif args.command == "observe":
+        print(json.dumps({"observed": bridge.observe_local_issues()}, ensure_ascii=False))
     else:
         print(json.dumps(bridge.state(), ensure_ascii=False, indent=2))
 
