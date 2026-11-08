@@ -137,7 +137,11 @@ class SetupEngine:
         for i in range(start_i, max_i):
             c_curr = candles[i]
             c_prev = candles[i - 1]
-            stats_i = self._get_stats_at(session_stats, i)
+            # The breakout candle must be judged against a finalized range
+            # known before the breakout/retest, never the retest bar's own high.
+            stats_i = self._get_stats_at(session_stats, i - 1)
+            if not stats_i.get("asia_complete", True):
+                continue
             asia = stats_i.get("asia", {})
             asia_high = asia.get("high")
             asia_low = asia.get("low")
@@ -221,16 +225,19 @@ class SetupEngine:
             c_reclaim = candles[i - 2]
             c_sweep = candles[i - 3]
 
-            stats_i = self._get_stats_at(session_stats, i)
+            # Freeze reference levels at the instant BEFORE the sweep candle.
+            # Later session highs/lows must never redefine what was swept.
+            stats_i = self._get_stats_at(session_stats, i - 4)
             levels = []
             if stats_i.get("pd", {}).get("high"):
                 levels.append(("PDH", stats_i["pd"]["high"], True))
             if stats_i.get("pd", {}).get("low"):
                 levels.append(("PDL", stats_i["pd"]["low"], False))
-            if stats_i.get("asia", {}).get("high"):
-                levels.append(("AsiaHigh", stats_i["asia"]["high"], True))
-            if stats_i.get("asia", {}).get("low"):
-                levels.append(("AsiaLow", stats_i["asia"]["low"], False))
+            if stats_i.get("asia_complete", True):
+                if stats_i.get("asia", {}).get("high") is not None:
+                    levels.append(("AsiaHigh", stats_i["asia"]["high"], True))
+                if stats_i.get("asia", {}).get("low") is not None:
+                    levels.append(("AsiaLow", stats_i["asia"]["low"], False))
 
             for level_name, level_val, is_high in levels:
                 # Bullish Sweep + Reclaim of Low level
