@@ -199,7 +199,7 @@ class ResearchSupervisor:
         return {
             "timestamp": datetime.now(TZ_UTC).isoformat(),
             "ledger_audit": ledger_status,
-            "status": "HEALTHY",
+            "status": "HEALTHY" if ledger_status == "LEDGER_INTEGRITY_OK" else "REQUIRES_REVIEW",
             "db_exists": self.db_path.exists(),
         }
 
@@ -216,19 +216,8 @@ class ResearchSupervisor:
     def run_research_cycle(self) -> Dict[str, Any]:
         """Loop 4: Reviews active hypotheses and evaluates sample sizes."""
         hypotheses = self.learning.list_hypotheses()
-        if not hypotheses:
-            # Seed 2 realistic SMC hypotheses for research backlog
-            self.learning.register_hypothesis(
-                title="فیلتر حجم دلتا روی شکست سقف/کف آسیا در سشن لندن",
-                rationale="تحلیل کالبدشکافی نشان می‌دهد ۳۰٪ ضررهای استراتژی S1 ناشی از شکست‌های پرقدرت بدون بازگشت است.",
-                target_metric="Sharpe > 1.3, R Expectancy +0.20",
-            )
-            self.learning.register_hypothesis(
-                title="افزایش بافر حد ضرر به ۱.۵ برابر ATR در اخبار متوسط",
-                rationale="تحلیل MAE نشان می‌دهد قیمت قبل از حرکت به سمت تارگت، با اختلاف چند پیپ حد ضرر را لمس می‌کند.",
-                target_metric="Win Rate +4.5%, Drawdown < 1.8%",
-            )
-            hypotheses = self.learning.list_hypotheses()
+        # Never invent statistical conclusions or seed fabricated loss rates.
+        # Unverified hypotheses must originate from measured evidence or an operator.
 
         return {
             "timestamp": datetime.now(TZ_UTC).isoformat(),
@@ -264,8 +253,8 @@ class ResearchSupervisor:
         markdown_content = f"""# گزارش جامع روزانه آزمایشگاه خودکار طلا — {shamsi_date} ({date_str})
 **تاریخ شمسی گزارش:** {shamsi_date}
 **زمان میلادی UTC:** {now_dt.strftime("%Y-%m-%d %H:%M:%S UTC")}
-**وضعیت سیستم:** عملیاتی و پایدار (Local macOS)
-**نسخه استراتژی فعال (Champion):** {champ_name} (امید ریاضی: R={champ_r:.2f})
+**وضعیت سیستم:** در حال ارزیابی — تأیید خودکار پایداری انجام نشده
+**نسخه ثبت‌شده (Champion):** {champ_name} (آمار ذخیره‌شده: R={champ_r:.2f}؛ اعتبارسنجی مستقل نشده)
 
 ---
 
@@ -273,7 +262,7 @@ class ResearchSupervisor:
 - **موجودی نقدی (Balance):** ${balance:.2f}
 - **ارزش شناور (Equity):** ${equity:.2f}
 - **تعداد کل معاملات ثبت‌شده:** {trades_count}
-- **تراز دفتر کل:** تایید شده و بدون مغایرت (Ledger Invariance OK)
+- **تراز دفتر کل:** نیازمند خواندن نتیجه ممیزی واقعی؛ این گزارش به‌تنهایی تأیید حسابداری نیست
 
 ## ۲. خلاصه کالبدشکافی معاملات (Trade Autopsy)
 تعداد کالبدشکافی‌های ثبت‌شده در این دوره: {len(autopsies)}
