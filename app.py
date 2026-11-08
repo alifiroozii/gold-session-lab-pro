@@ -83,7 +83,13 @@ verified_quote: Optional[MarketQuote] = None
 market_block_reason = "NO_VERIFIED_LIVE_QUOTE"
 engine.market_data_source = "NO_VERIFIED_PROVIDER_DATA"
 broker = PaperBroker(db_path=DB_PATH)
-bot = AutomatedPaperBot(account_id="ACC_DEFAULT", broker=broker, engine=engine, db_path=DB_PATH)
+# The strategy runtime is immutable at 5m and independent of chart browsing.
+# Users switching their chart to 1m/15m must not silently change bot decisions.
+strategy_engine = ResearchEngine(db_path=DB_PATH)
+strategy_engine.current_timeframe = "5m"
+bot = AutomatedPaperBot(
+    account_id="ACC_DEFAULT", broker=broker, engine=strategy_engine, db_path=DB_PATH
+)
 backtester = BacktestingEngine(db_path=DB_PATH)
 
 # Autonomous Research & Safety Engines
@@ -118,6 +124,9 @@ engine.calendar = MacroNewsCalendar(
         ),
     ]
 )
+
+# Keep the scheduled economic blackout calendar consistent across engines.
+strategy_engine.calendar = engine.calendar
 
 # Load demo dataset on startup
 DEMO_CSV = DATA_DIR / "demo_xauusd_1m.csv"
