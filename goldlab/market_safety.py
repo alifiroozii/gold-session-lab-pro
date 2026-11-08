@@ -27,6 +27,8 @@ class MarketQuote:
     source: str
     instrument: str = "XAU_USD"
     tradeable: bool = False
+    bid_display: str = ""
+    ask_display: str = ""
 
 
 def execution_gate(quote: Optional[MarketQuote], now: Optional[datetime] = None,
@@ -72,7 +74,43 @@ class OandaReadOnlyFeed:
             raise ValueError("OANDA_ENV must be practice or live")
         self.host = ("https://api-fxpractice.oanda.com" if self.environment == "practice"
                      else "https://api-fxtrade.oanda.com")
+        self.stream_host = ("https://stream-fxpractice.oanda.com" if self.environment == "practice"
+                            else "https://stream-fxtrade.oanda.com")
         self.configured = bool(self.token and self.account_id)
+
+    @property
+    def stream_url(self) -> str:
+        """The official read-only, newline-delimited OANDA pricing stream."""
+        from urllib.parse import quote
+        return (f"{self.stream_host}/v3/accounts/{quote(self.account_id, safe='')}"
+                "/pricing/stream?instruments=XAU_USD")
+
+    def quote_from_price(self, payload: dict) -> MarketQuote:
+        """Validate a provider PRICE event; heartbeats cannot authorize orders."""
+        from decimal import Decimal, InvalidOperation
+        if payload.get("instrument") != "XAU_USD" or payload.get("type", "PRICE") != "PRICE":
+            raise ValueError("NOT_XAU_USD_PRICE_EVENT")
+        bids, asks = payload.get("bids") or [], payload.get("asks") or []
+        if not bids or not asks:
+            raise ValueError("OANDA_HAS_NO_BID_ASK")
+        bid_text, ask_text = str(bids[0]["price"]), str(asks[0]["price"])
+        try:
+            bid, ask = Decimal(bid_text), Decimal(ask_text)
+        except (InvalidOperation, ValueError) as err:
+            raise ValueError("INVALID_PROVIDER_PRICE") from err
+        if not bid.is_finite() or not ask.is_finite() or bid <= 0 or ask <= bid:
+            raise ValueError("INVALID_PROVIDER_BID_ASK")
+        ts = datetime.fromisoformat(str(payload["time"]).replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            raise ValueError("MISSING_PROVIDER_TIMESTAMP_TZ")
+        return MarketQuote(
+            bid=float(bid), ask=float(ask), timestamp=ts,
+            source="OANDA_V20_READ_ONLY",
+            tradeable=(payload.get("tradeable") is True or
+                       (payload.get("status") == "tradeable"
+                        and payload.get("tradeable") is not False)),
+            bid_display=bid_text, ask_display=ask_text,
+        )
 
     def _get(self, path: str) -> dict:
         if not self.configured:
@@ -92,17 +130,7 @@ class OandaReadOnlyFeed:
         records = [p for p in raw.get("prices", []) if p.get("instrument") == "XAU_USD"]
         if not records:
             raise RuntimeError("XAU_USD_UNAVAILABLE_FOR_THIS_ACCOUNT")
-        p = records[0]
-        bids, asks = p.get("bids") or [], p.get("asks") or []
-        if not bids or not asks:
-            raise RuntimeError("OANDA_HAS_NO_BID_ASK")
-        ts = datetime.fromisoformat(p["time"].replace("Z", "+00:00"))
-        return MarketQuote(
-            bid=float(bids[0]["price"]), ask=float(asks[0]["price"]),
-            timestamp=ts, source="OANDA_V20_READ_ONLY",
-            tradeable=(p.get("tradeable") is True or
-                       (p.get("status") == "tradeable" and p.get("tradeable") is not False)),
-        )
+        return self.quote_from_price(records[0])
 
     def historical_m1(self, count: int = 5000) -> list:
         """Return completed, real M1 candles (not ticks, not a live quote)."""
