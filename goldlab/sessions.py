@@ -181,3 +181,64 @@ class SessionManager:
         stats["pw"] = _format_hl(pw_high, pw_low)
 
         return stats
+
+    def calculate_session_boxes(self, candles: List[Candle], days: int = 4) -> List[Dict[str, object]]:
+        """Time-bounded Asia/London/New York + overlap rectangles, including prior days.
+
+        Price bounds use only candles inside each session; no future candles are
+        used to finalize a session. Chart overlays are research-only.
+        """
+        if not candles:
+            return []
+        from collections import defaultdict
+
+        definitions = [
+            ("asia", SessionName.TOKYO, TZ_TOKYO, self.config.tokyo_start, self.config.tokyo_end),
+            ("london", SessionName.LONDON, TZ_LONDON, self.config.london_start, self.config.london_end),
+            ("new_york", SessionName.NEW_YORK, TZ_NEW_YORK, self.config.ny_start, self.config.ny_end),
+        ]
+        grouped: Dict[tuple, List[Candle]] = defaultdict(list)
+        for candle in candles:
+            sessions = self.get_candle_sessions(candle.timestamp)
+            for name, enum, zone, _start, _end in definitions:
+                if enum in sessions:
+                    grouped[(name, candle.timestamp.astimezone(zone).date())].append(candle)
+            if SessionName.LONDON_NY_OVERLAP in sessions:
+                grouped[("overlap", candle.timestamp.astimezone(TZ_NEW_YORK).date())].append(candle)
+
+        last_observed = max(c.timestamp for c in candles)
+        result = []
+        for (name, session_date), bars in grouped.items():
+            if name == "overlap":
+                london_start = datetime.combine(session_date, self.config.london_start, TZ_LONDON).astimezone(TZ_UTC)
+                london_end = datetime.combine(session_date, self.config.london_end, TZ_LONDON).astimezone(TZ_UTC)
+                ny_start = datetime.combine(session_date, self.config.ny_start, TZ_NEW_YORK).astimezone(TZ_UTC)
+                ny_end = datetime.combine(session_date, self.config.ny_end, TZ_NEW_YORK).astimezone(TZ_UTC)
+                start_utc, end_utc = max(london_start, ny_start), min(london_end, ny_end)
+            else:
+                definition = next(d for d in definitions if d[0] == name)
+                _, _enum, zone, local_start, local_end = definition
+                start_utc = datetime.combine(session_date, local_start, zone).astimezone(TZ_UTC)
+                end_utc = datetime.combine(session_date, local_end, zone).astimezone(TZ_UTC)
+            if end_utc <= start_utc:
+                continue
+            high, low = max(bar.high for bar in bars), min(bar.low for bar in bars)
+            completed = last_observed >= end_utc
+            result.append({
+                "id": f"{name}-{session_date.isoformat()}",
+                "session": name,
+                "date": session_date.isoformat(),
+                "start": int(start_utc.timestamp()),
+                "end": int((end_utc if completed else min(last_observed, end_utc)).timestamp()),
+                "high": round(high, 4), "low": round(low, 4),
+                "completed": completed,
+                "bars": len(bars),
+            })
+
+        # Preserve a compact number of recent windows per session, incl. preceding day.
+        limited = []
+        for name in ("asia", "london", "new_york", "overlap"):
+            matching = sorted((b for b in result if b["session"] == name),
+                              key=lambda b: b["start"], reverse=True)
+            limited.extend(matching[:days])
+        return sorted(limited, key=lambda b: (b["start"], b["session"]))
