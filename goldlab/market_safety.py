@@ -9,8 +9,8 @@ import json
 import math
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone, time
-from typing import Optional
+from datetime import datetime, time, timezone
+from typing import Any, Dict, Optional, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
@@ -83,7 +83,7 @@ class OandaReadOnlyFeed:
         }, method="GET")
         try:
             with urlopen(request, timeout=8) as response:
-                return json.load(response)
+                return cast(Dict[str, Any], json.load(response))
         except (HTTPError, URLError, TimeoutError) as err:
             raise RuntimeError("OANDA_PRICE_FEED_UNAVAILABLE") from err
 

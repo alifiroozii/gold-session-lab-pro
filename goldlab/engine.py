@@ -43,6 +43,7 @@ class ResearchEngine:
         self.calendar = MacroNewsCalendar()
 
         # State cache
+        self.market_data_source: str = "DEMO_CSV"
         self.candles_1m: List[Candle] = []
         self.current_candles: List[Candle] = []
         self.current_timeframe: str = "5m"

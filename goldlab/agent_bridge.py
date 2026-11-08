@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 UTC = timezone.utc
 ALLOWED_EVENTS = {
@@ -127,7 +128,7 @@ class AgentBridge:
             tables = {row[0] for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )}
-            sources = []
+            sources: List[Tuple[str, Dict[str, Any]]] = []
             if "diagnostics_incidents" in tables:
                 sources.extend(("INCIDENT", dict(row)) for row in conn.execute(
                     "SELECT incident_id AS id, title, category AS classification"

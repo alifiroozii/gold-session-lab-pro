@@ -29,8 +29,8 @@ from goldlab.calendar import EconomicEvent, MacroNewsCalendar
 from goldlab.diagnostics import DiagnosticsEngine
 from goldlab.engine import ResearchEngine
 from goldlab.guardian import IndependentRiskGuardian
-from goldlab.market_safety import OandaReadOnlyFeed, MarketQuote, execution_gate
 from goldlab.learning import MistakeAnalyzerAndHypothesisRegistry
+from goldlab.market_safety import MarketQuote, OandaReadOnlyFeed, execution_gate
 from goldlab.ml_model import MLTradeQualityModel
 from goldlab.paper_broker import OrderDirection, OrderStatus, OrderType, PaperBroker
 from goldlab.promotion import ChampionChallengerManager
