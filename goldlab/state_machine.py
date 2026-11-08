@@ -19,13 +19,13 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from goldlab.calendar import MacroNewsCalendar
-from goldlab.market_safety import MarketQuote
+from goldlab.market_safety import MarketQuote, execution_gate
 from goldlab.sessions import SessionManager
 from goldlab.types import Candle, SessionName, SetupSignal, SignalDirection
 
@@ -752,20 +752,25 @@ class SessionTradingStateMachine:
     ) -> None:
         """Evaluates filters and stores a shadow entry proposal in SQLite."""
         pid = f"PROP_{candle.timestamp.strftime('%Y%m%d_%H%M%S')}_{sig.direction.value}"
-        spread = live_quote.spread if live_quote else 0.30
+        spread = live_quote.spread if live_quote else None
 
         # Evaluate risk/filtering conditions
         status = "ELIGIBLE_SHADOW"
         reason = "واجد شرایط کامل در حالت سایه (Shadow Mode - بدون سفارش زنده)"
 
-        if spread > 0.50:
+        is_blackout, news_reason = calendar.is_blackout(candle.timestamp) if calendar else (False, "")
+        quote_ok, quote_reason = execution_gate(
+            live_quote, now=candle.timestamp + timedelta(minutes=5),
+        )
+        if is_blackout:
+            status = "REJECTED_NEWS"
+            reason = f"توقف به دلیل انتشار خبر اقتصادی حساس ({news_reason})"
+        elif spread is not None and spread > self.max_spread:
             status = "REJECTED_SPREAD"
-            reason = f"اسپرد جاری ({spread:.2f}$) بالاتر از سقف مجاز ($0.50) است."
-        elif calendar:
-            is_blackout, news_reason = calendar.is_blackout(candle.timestamp)
-            if is_blackout:
-                status = "REJECTED_NEWS"
-                reason = f"توقف به دلیل انتشار خبر اقتصادی حساس ({news_reason})"
+            reason = f"اسپرد جاری ({spread:.2f}$) بالاتر از سقف مجاز است."
+        elif not quote_ok:
+            status = "REJECTED_QUOTE"
+            reason = "مظنه معتبر در زمان بسته‌شدن کندل موجود نیست: " + quote_reason
         elif sig.risk_r <= 0 or (abs(sig.tp_price - sig.entry_price) / sig.risk_r) < self.risk_reward_ratio:
             status = "REJECTED_RISK"
             reason = f"نسبت ریوارد به ریسک کمتر از سقف مجاز ({self.risk_reward_ratio}R) است."

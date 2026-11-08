@@ -318,6 +318,20 @@ async def oanda_stream_loop() -> None:
         delay = min(delay * 2, 30)
 
 
+def process_provider_candles(bars) -> None:
+    """Keep chart navigation independent of the fixed 5m shadow event stream."""
+    engine.load_candles(bars, timeframe=engine.current_timeframe, require_complete=True)
+    engine.market_data_source = "OANDA_HISTORICAL_MID"
+    engine.run_pipeline()
+    completed_5m = engine.data_pipeline.aggregate_candles(
+        bars, "5m", require_complete=True,
+    )
+    if completed_5m:
+        session_state_machine.process_completed_5m_candles(
+            completed_5m, live_quote=verified_quote, calendar=engine.calendar,
+        )
+
+
 async def market_heartbeat_loop() -> None:
     """Enforce quote TTL, refresh provider candles and publish real incidents."""
     global verified_quote, market_block_reason
@@ -352,16 +366,7 @@ async def market_heartbeat_loop() -> None:
                 try:
                     bars = await asyncio.to_thread(market_feed.historical_m1)
                     if bars:
-                        engine.load_candles(bars, timeframe=engine.current_timeframe, require_complete=True)
-                        engine.market_data_source = "OANDA_HISTORICAL_MID"
-                        engine.run_pipeline()
-                        if engine.current_candles:
-                            await asyncio.to_thread(
-                                session_state_machine.process_completed_5m_candles,
-                                engine.current_candles,
-                                live_quote=verified_quote,
-                                calendar=engine.calendar,
-                            )
+                        await asyncio.to_thread(process_provider_candles, bars)
                         if verified_quote:
                             bot_signals = bot.on_candle_close(
                                 bars,
@@ -380,10 +385,11 @@ async def market_heartbeat_loop() -> None:
                             "type": "CANDLES_UPDATED", "source": "OANDA_HISTORICAL_MID",
                             "timestamp": bars[-1].timestamp.isoformat(),
                         })
-                except Exception:
-                    # Leave previously verified historical candles in place;
-                    # never substitute demo CSV or extrapolated candle prices.
-                    pass
+                except Exception as error:
+                    diagnostics.categorize_exception(
+                        RuntimeError(type(error).__name__),
+                        {"source": "provider_completed_candles", "error_type": type(error).__name__},
+                    )
             if counter % 6 == 0:
                 supervisor.run_health_loop(broker)
                 guardian.audit_ledger_invariance("ACC_DEFAULT", broker)
