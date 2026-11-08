@@ -231,69 +231,6 @@ body {
     gap: 12px;
     margin-bottom: 12px;
 }
-.chart-mode-selector {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    background: #F1F5F9;
-    padding: 4px;
-    border-radius: var(--radius);
-}
-.mode-btn {
-    border: none;
-    background: transparent;
-    padding: 6px 14px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    transition: all 0.2s ease-in-out;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.mode-btn:hover {
-    color: var(--text-primary);
-    background: #E2E8F0;
-}
-.mode-btn.active {
-    background: #FFFFFF;
-    color: var(--accent-blue);
-    box-shadow: var(--shadow-sm);
-}
-.mode-btn.active#btnModeTvLive {
-    color: var(--profit-green);
-}
-.live-pulse {
-    width: 8px;
-    height: 8px;
-    background-color: var(--profit-green);
-    border-radius: 50%;
-    display: inline-block;
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
-    animation: pulse-green 1.8s infinite;
-}
-@keyframes pulse-green {
-    0% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
-    }
-    70% {
-        transform: scale(1);
-        box-shadow: 0 0 0 6px rgba(22, 163, 74, 0);
-    }
-    100% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
-    }
-}
-.session-controls-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-}
 .timeframe-selector {
     display: flex;
     gap: 4px;
@@ -325,39 +262,14 @@ body {
     gap: 4px;
 }
 
-.charts-view-wrapper {
-    position: relative;
-    width: 100%;
-}
-.charts-view-wrapper.split-mode {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-}
-@media (max-width: 1200px) {
-    .charts-view-wrapper.split-mode {
-        grid-template-columns: 1fr;
-    }
-}
 .chart-viewport {
     height: 560px;
     width: 100%;
-    position: relative;
+    position: relative !important;
     border: 1px solid #E2E8F0;
     border-radius: var(--radius);
     overflow: hidden;
     background: #FFFFFF;
-}
-.tv-chart-viewport {
-    height: 560px;
-}
-.session-chart-viewport {
-    height: 560px;
-}
-.chart-inner-canvas {
-    height: 100%;
-    width: 100%;
-    position: relative;
 }
 
 .session-levels-bar {

@@ -46,10 +46,10 @@ class PositionStatus(str, Enum):
 class PaperAccount:
     account_id: str
     name: str
-    balance: float = 10000.0  # Default $10,000 USD virtual
-    equity: float = 10000.0
+    balance: float = 1000.0  # Default $1,000 USD virtual
+    equity: float = 1000.0
     margin_used: float = 0.0
-    margin_free: float = 10000.0
+    margin_free: float = 1000.0
     margin_level_pct: float = 0.0
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
@@ -231,7 +231,7 @@ class PaperBroker:
 
             # Create default account if none exists
             if not self.accounts:
-                default_acc = self.create_account("ACC_DEFAULT", "حساب پیش‌فرض مجازی (Paper Main)", 10000.0)
+                default_acc = self.create_account("ACC_DEFAULT", "حساب پیش‌فرض مجازی (Paper Main)", 1000.0)
                 self.accounts[default_acc.account_id] = default_acc
 
             # Load open positions
@@ -276,7 +276,7 @@ class PaperBroker:
                 )
                 self.orders[ord_obj.order_id] = ord_obj
 
-    def create_account(self, account_id: str, name: str, initial_deposit: float = 10000.0) -> PaperAccount:
+    def create_account(self, account_id: str, name: str, initial_deposit: float = 1000.0) -> PaperAccount:
         """Creates a new virtual account with ledger deposit entry."""
         acc = PaperAccount(
             account_id=account_id,
@@ -370,7 +370,7 @@ class PaperBroker:
             conn.commit()
         return acc
 
-    def reset_account(self, account_id: str, new_balance: float = 10000.0) -> PaperAccount:
+    def reset_account(self, account_id: str, new_balance: float = 1000.0) -> PaperAccount:
         """Resets account by archiving/closing open positions and orders, and setting new balance."""
         acc = self.accounts[account_id]
         # Close positions
@@ -406,10 +406,11 @@ class PaperBroker:
                 "UPDATE paper_accounts SET balance = ?, equity = ?, margin_used = 0.0 WHERE account_id = ?",
                 (new_balance, new_balance, account_id),
             )
+            conn.execute("DELETE FROM wallet_ledger WHERE account_id = ?", (account_id,))
             self._record_ledger(
                 conn,
                 account_id=account_id,
-                entry_type="RESET",
+                entry_type="INITIAL_DEPOSIT",
                 amount=new_balance,
                 balance_after=new_balance,
                 notes=f"ریست کامل حساب مجازی به موجودی {new_balance:,.2f} دلار",

@@ -574,6 +574,22 @@ async def set_market_timeframe(req: TimeframeRequest) -> Dict[str, str]:
     return {"status": "success", "timeframe": req.timeframe}
 
 
+@app.post("/api/market/load-demo")
+async def load_demo_data() -> Dict[str, Any]:
+    """Loads session analysis dataset into the chart engine."""
+    if DEMO_CSV.exists():
+        engine.load_from_csv(DEMO_CSV, timeframe=engine.current_timeframe)
+        engine.market_data_source = "DEMO_CSV"
+        engine.run_pipeline()
+        return {
+            "status": "SUCCESS",
+            "message": "داده‌های سشن‌ها بارگذاری شدند.",
+            "count": len(engine.current_candles),
+            "session_boxes": len(engine.session_mgr.calculate_session_boxes(engine.current_candles)),
+        }
+    raise HTTPException(status_code=404, detail="فایل دمو یافت نشد.")
+
+
 @app.get("/api/regime/current")
 async def get_current_regime() -> Dict[str, Any]:
     """Returns real-time market regime, volatility ratio, trend slope, and trading favorability."""
@@ -642,7 +658,7 @@ async def withdraw_funds(req: FundRequest) -> Dict[str, Any]:
 
 @app.post("/api/broker/reset")
 async def reset_account() -> Dict[str, Any]:
-    acc = broker.reset_account("ACC_DEFAULT", 10000.0)
+    acc = broker.reset_account("ACC_DEFAULT", 1000.0)
     return {"status": "success", "balance": acc.balance}
 
 
@@ -1086,4 +1102,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
 if __name__ == "__main__":
+    if not engine.current_candles and DEMO_CSV.exists():
+        engine.load_from_csv(DEMO_CSV, timeframe="5m")
+        engine.market_data_source = "DEMO_CSV"
+        engine.run_pipeline()
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)

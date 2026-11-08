@@ -200,7 +200,7 @@ def test_scenario_7_antigravity_disconnected_paper_engine_independent(tmp_path: 
     broker = PaperBroker(db_path=db_file)
     account = broker.accounts.get("ACC_DEFAULT")
     assert account is not None
-    assert account.balance == 10000.0
+    assert account.balance == 1000.0
 
     # Broker submits orders independently of AI status
     order = broker.submit_order(

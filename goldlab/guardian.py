@@ -44,7 +44,7 @@ class IndependentRiskGuardian:
     ) -> None:
         self.config = config or RiskGuardianConfig()
         self.db_path = Path(db_path)
-        self.daily_starting_equity: float = 10000.0
+        self.daily_starting_equity: float = 1000.0
         self.consecutive_losses_count: int = 0
         self.cooldown_remaining_bars: int = 0
         self.last_reset_date: Optional[str] = None

@@ -66,7 +66,7 @@ class AutomatedPaperBot:
         self.today_trades_count: int = 0
         self.consecutive_losses: int = 0
         self.cooldown_remaining_bars: int = 0
-        self.daily_start_balance: float = 10000.0
+        self.daily_start_balance: float = 1000.0
         self.last_trade_date: Optional[str] = None
         self.dispatched_signals: Set[Tuple[str, str, int]] = set()
         self.last_evaluation_time: Optional[datetime] = None

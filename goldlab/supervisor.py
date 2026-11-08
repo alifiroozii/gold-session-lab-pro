@@ -236,8 +236,8 @@ class ResearchSupervisor:
         champ_name = champ.name if champ else "Unknown"
         champ_r = champ.expectancy_r if champ else 0.0
 
-        equity = 10000.0
-        balance = 10000.0
+        equity = 1000.0
+        balance = 1000.0
         trades_count = 0
         if broker and broker.accounts:
             acc = next(iter(broker.accounts.values()))

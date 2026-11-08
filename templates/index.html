@@ -102,17 +102,17 @@
     <section class="stats-grid">
         <div class="stat-card">
             <div class="stat-title">موجودی مجازی (Balance)</div>
-            <div class="stat-value" id="accBalance">$10,000.00</div>
+            <div class="stat-value" id="accBalance">$1,000.00</div>
             <div class="stat-sub">کیف پول شبیه‌سازی‌شده (Ledger OK)</div>
         </div>
         <div class="stat-card">
             <div class="stat-title">ارزش حساب (Equity)</div>
-            <div class="stat-value" id="accEquity">$10,000.00</div>
+            <div class="stat-value" id="accEquity">$1,000.00</div>
             <div class="stat-sub" id="accFloatingSub">سود/زیان شناور: $0.00</div>
         </div>
         <div class="stat-card">
             <div class="stat-title">مارجین آزاد (Free Margin)</div>
-            <div class="stat-value" id="accFreeMargin">$10,000.00</div>
+            <div class="stat-value" id="accFreeMargin">$1,000.00</div>
             <div class="stat-sub" id="accMarginLevel">سطح مارجین: 0.0%</div>
         </div>
         <div class="stat-card">
@@ -158,77 +158,32 @@
             <div class="chart-layout">
                 <div class="chart-main-column">
                     <div class="chart-toolbar">
-                        <!-- Chart Mode Switcher -->
-                        <div class="chart-mode-selector">
-                            <button type="button" class="mode-btn active" id="btnModeTvLive" onclick="switchChartMode('TV_LIVE')">
-                                <span class="live-pulse"></span> 🟢 چارت زنده تریدینگ‌ویو (TradingView Live)
-                            </button>
-                            <button type="button" class="mode-btn" id="btnModeSessionLab" onclick="switchChartMode('SESSION_LAB')">
-                                🔬 چارت تحلیلی سشن‌ها (Session Lab Pro)
-                            </button>
-                            <button type="button" class="mode-btn" id="btnModeSplit" onclick="switchChartMode('SPLIT')">
-                                📊 نمای همزمان (Split View)
-                            </button>
+                        <div class="timeframe-selector">
+                            <button class="tf-btn" data-tf="1m">1m</button>
+                            <button class="tf-btn active" data-tf="5m">5m</button>
+                            <button class="tf-btn" data-tf="15m">15m</button>
+                            <button class="tf-btn" data-tf="1h">1h</button>
                         </div>
-
-                        <!-- Session Lab Controls (Visible in Session Lab & Split Modes) -->
-                        <div class="session-controls-group" id="sessionControlsGroup" style="display: none;">
-                            <div class="timeframe-selector">
-                                <button class="tf-btn" data-tf="1m">1m</button>
-                                <button class="tf-btn active" data-tf="5m">5m</button>
-                                <button class="tf-btn" data-tf="15m">15m</button>
-                                <button class="tf-btn" data-tf="1h">1h</button>
-                            </div>
-                            <div class="layer-toggles">
-                                <label><input type="checkbox" id="toggleSessions" checked> محدوده سشن‌ها</label>
-                                <label><input type="checkbox" id="toggleLevels"> خطوط سقف/کف</label>
-                                <label><input type="checkbox" id="toggleTrades"> معاملات بک‌تست</label>
-                                <label><input type="checkbox" id="toggleSignals"> سیگنال‌ها</label>
-                            </div>
-                            <div class="replay-controls">
-                                <button class="btn btn-secondary btn-sm" id="btnReplayPrev">⏮ کندل قبل</button>
-                                <button class="btn btn-primary btn-sm" id="btnReplayPlay">▶ بازپخش</button>
-                                <button class="btn btn-secondary btn-sm" id="btnReplayNext">کندل بعد ⏭</button>
-                            </div>
+                        <div class="layer-toggles">
+                            <label><input type="checkbox" id="toggleSessions" checked> محدوده سشن‌ها (آسیا، لندن، نیویورک)</label>
+                            <label><input type="checkbox" id="toggleLevels"> خطوط سقف/کف</label>
+                            <label><input type="checkbox" id="toggleTrades"> معاملات بک‌تست</label>
+                            <label><input type="checkbox" id="toggleSignals"> سیگنال‌های ستاپ</label>
+                        </div>
+                        <div class="replay-controls">
+                            <button class="btn btn-secondary btn-sm" id="btnReplayPrev">⏮ کندل قبل</button>
+                            <button class="btn btn-primary btn-sm" id="btnReplayPlay">▶ بازپخش (Replay)</button>
+                            <button class="btn btn-secondary btn-sm" id="btnReplayNext">کندل بعد ⏭</button>
                         </div>
                     </div>
 
-                    <!-- Charts Viewport Wrapper (Single or Split Mode) -->
-                    <div id="chartsViewWrapper" class="charts-view-wrapper mode-tv-live">
-                        <!-- 1. TradingView Live Advanced Real-Time Chart Viewport -->
-                        <div id="tvChartContainer" class="chart-viewport tv-chart-viewport">
-                            <div class="tradingview-widget-container" style="height:100%;width:100%">
-                                <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
-                                <div class="tradingview-widget-copyright">
-                                    <a href="https://fa.tradingview.com/" rel="noopener nofollow" target="_blank"><span class="blue-text">مشاهده چارت طلا در تریدینگ‌ویو (TradingView)</span></a>
-                                </div>
-                                <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-                                {
-                                  "autosize": true,
-                                  "symbol": "OANDA:XAUUSD",
-                                  "interval": "5",
-                                  "timezone": "Asia/Tehran",
-                                  "theme": "light",
-                                  "style": "1",
-                                  "locale": "fa_IR",
-                                  "enable_publishing": false,
-                                  "allow_symbol_change": true,
-                                  "calendar": false,
-                                  "support_host": "https://www.tradingview.com"
-                                }
-                                </script>
-                            </div>
-                        </div>
-
-                        <!-- 2. Session Lab Lightweight Charts Viewport -->
-                        <div id="sessionLabContainer" class="chart-viewport session-chart-viewport" style="display: none;">
-                            <div id="chartContainer" class="chart-inner-canvas">
-                                <div id="sessionOverlay" class="session-overlay" aria-hidden="true"></div>
-                            </div>
-                        </div>
+                    <!-- Single Primary Chart with ICT Sessions Overlay -->
+                    <div id="chartContainer" class="chart-viewport">
+                        <div id="sessionOverlay" class="session-overlay" aria-hidden="true"></div>
                     </div>
-
-                    <div class="chart-footnote" id="chartFootnote">🟢 چارت زنده تریدینگ‌ویو: دریافت بی‌درنگ کندل‌ها و قیمت‌های زنده XAU/USD (OANDA:XAUUSD) مستقیماً از تریدینگ‌ویو بدون وقفه.</div>
+                    <div class="chart-footnote" id="chartFootnote">
+                        مستطیل‌ها: محدوده قیمت هر سشن (آسیا: آبی • لندن: سبز • نیویورک: نارنجی • هم‌پوشانی: بنفش) • خط زنده: قیمت لحظه‌ای تریدینگ‌ویو
+                    </div>
 
                     <!-- Chart Level Indicators -->
                     <div class="session-levels-bar">

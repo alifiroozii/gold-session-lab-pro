@@ -12,65 +12,10 @@ let currentMarketData = null;
 let activePriceLines = [];
 let sessionRectangles = [];
 let liveQuoteLine = null;
-let currentChartMode = "TV_LIVE";
-
-// --- مدیریت تغییر حالت نمایش چارت (تریدینگ‌ویو زنده / سشن‌های تحلیلی / نمای مقایسه همزمان) ---
-window.switchChartMode = function(mode) {
-    currentChartMode = mode;
-    const btnTv = document.getElementById("btnModeTvLive");
-    const btnSession = document.getElementById("btnModeSessionLab");
-    const btnSplit = document.getElementById("btnModeSplit");
-    const tvContainer = document.getElementById("tvChartContainer");
-    const sessionContainer = document.getElementById("sessionLabContainer");
-    const wrapper = document.getElementById("chartsViewWrapper");
-    const sessionControls = document.getElementById("sessionControlsGroup");
-    const footnote = document.getElementById("chartFootnote");
-
-    [btnTv, btnSession, btnSplit].forEach(b => b?.classList.remove("active"));
-
-    if (mode === "TV_LIVE") {
-        btnTv?.classList.add("active");
-        if (tvContainer) tvContainer.style.display = "block";
-        if (sessionContainer) sessionContainer.style.display = "none";
-        if (sessionControls) sessionControls.style.display = "none";
-        wrapper?.classList.remove("split-mode");
-        if (footnote) {
-            footnote.textContent = "🟢 چارت زنده تریدینگ‌ویو: دریافت بی‌درنگ کندل‌ها و قیمت‌های زنده XAU/USD (OANDA:XAUUSD) مستقیماً از تریدینگ‌ویو بدون وقفه.";
-        }
-    } else if (mode === "SESSION_LAB") {
-        btnSession?.classList.add("active");
-        if (tvContainer) tvContainer.style.display = "none";
-        if (sessionContainer) sessionContainer.style.display = "block";
-        if (sessionControls) sessionControls.style.display = "flex";
-        wrapper?.classList.remove("split-mode");
-        if (footnote) {
-            footnote.textContent = "مستطیل‌ها: محدوده قیمت هر سشن • خطوط بالایی و پایینی: سقف و کف • هم‌پوشانی لندن/نیویورک: بنفش • معاملات خودکار فعلاً غیرفعال";
-        }
-        resizeSessionChart();
-    } else if (mode === "SPLIT") {
-        btnSplit?.classList.add("active");
-        if (tvContainer) tvContainer.style.display = "block";
-        if (sessionContainer) sessionContainer.style.display = "block";
-        if (sessionControls) sessionControls.style.display = "flex";
-        wrapper?.classList.add("split-mode");
-        if (footnote) {
-            footnote.textContent = "📊 نمای همزمان (Split View): مقایسه زنده چارت تریدینگ‌ویو در کنار سطوح سشن‌های آسیا، لندن، نیویورک و ستاپ‌های استراتژی.";
-        }
-        resizeSessionChart();
-    }
+// --- چارت واحد تحلیلی سشن‌ها و سطوح معاملاتی طلا ---
+window.switchChartMode = function(_mode) {
+    // چارت واحد به عنوان تنها چارت اصلی فعال است
 };
-
-function resizeSessionChart() {
-    requestAnimationFrame(() => {
-        const container = document.getElementById("chartContainer");
-        if (chart && container) {
-            const w = container.clientWidth || 600;
-            chart.applyOptions({ width: w, height: 560 });
-            chart.timeScale().fitContent();
-            drawSessionBoxes();
-        }
-    });
-}
 
 // --- دریافت و اعمال قیمت زنده تریدینگ‌ویو برای اعداد داشبورد و چارت ---
 async function fetchTradingViewQuote() {
@@ -209,8 +154,8 @@ function initChart() {
     if (!container) return;
 
     chart = LightweightCharts.createChart(container, {
-        width: container.clientWidth,
-        height: 520,
+        width: container.clientWidth || 800,
+        height: 560,
         layout: {
             background: { color: "#FFFFFF" },
             textColor: "#172033",
@@ -268,9 +213,16 @@ function initChart() {
 // 4. Market Data Loader
 async function fetchMarketData() {
     try {
-        const res = await fetch(`/api/market?timeframe=${currentTimeframe}`);
+        let res = await fetch(`/api/market?timeframe=${currentTimeframe}`);
         if (!res.ok) return;
-        const data = await res.json();
+        let data = await res.json();
+        if (!data.candles || data.candles.length === 0) {
+            const loadRes = await fetch("/api/market/load-demo", { method: "POST" });
+            if (loadRes.ok) {
+                res = await fetch(`/api/market?timeframe=${currentTimeframe}`);
+                if (res.ok) data = await res.json();
+            }
+        }
         renderMarketData(data);
     } catch (err) {
         console.error("Error fetching market data:", err);
@@ -310,6 +262,7 @@ function renderMarketData(data) {
         close: c.close
     }));
     candleSeries.setData(chartBars);
+    try { chart.timeScale().fitContent(); } catch (_e) {}
 
     // Update Quote Box
     const lastBar = currentCandles[currentCandles.length - 1];

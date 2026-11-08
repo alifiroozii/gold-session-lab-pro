@@ -91,3 +91,17 @@ def test_tradingview_quote_endpoint() -> None:
         assert q["bid"] > 0
         assert q["ask"] >= q["bid"]
         assert "source" in q
+
+
+def test_load_demo_endpoint() -> None:
+    res = client.post("/api/market/load-demo")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "SUCCESS"
+    assert data["count"] > 0
+    assert data["session_boxes"] > 0
+    # Reset engine state for subsequent isolation tests
+    from app import engine
+    engine.current_candles = []
+    engine.candles_1m = []
+    engine.market_data_source = "NO_VERIFIED_PROVIDER_DATA"
