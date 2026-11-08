@@ -534,8 +534,11 @@ async def get_market_comparison() -> Dict[str, Any]:
 
 @app.get("/api/strategy/state")
 async def get_strategy_state() -> Dict[str, Any]:
-    """Real-time 10-state causal session state machine context and transition history."""
-    return session_state_machine.get_state_summary()
+    """Research state snapshot, explicitly NOT connected to the execution loop."""
+    result = session_state_machine.get_state_summary()
+    result["runtime_status"] = "NOT_WIRED_TO_LIVE_CANDLE_LOOP"
+    result["enabled_for_auto_trading"] = False
+    return result
 
 
 # --- Pydantic Request Models ---
@@ -977,48 +980,74 @@ async def get_agent_status() -> Dict[str, Any]:
 
 @app.get("/api/agent/supervisor-report")
 async def get_supervisor_report() -> Dict[str, Any]:
-    """Returns verifiable fields for the 'ناظر هوشمند و گزارش اصلاحات' dashboard panel."""
+    """Display ONLY evidenced Antigravity work. Never fabricate CI counts or SHAs."""
     state = agent_bridge.state()
+    agent_events = [
+        event for event in state.get("events", [])
+        if event.get("actor") == "ANTIGRAVITY"
+    ]
+    def latest_event(*phases: str) -> Optional[Dict[str, Any]]:
+        return next((event for event in agent_events
+                     if event.get("phase") in phases), None)
+
+    investigated = latest_event("REPRODUCED", "INVESTIGATING", "OBSERVED")
+    proposed = latest_event("PATCH_PROPOSED")
+    tested = latest_event("TESTS_FAILED", "TESTS_PASSED")
+    referenced = next((event for event in agent_events if event.get("git_ref")), None)
 
     strat_file = REPORTS_DIR / "STRATEGY_VALIDATION.json"
-    strat_audit_text = "STRUCTURAL_CHECKS_ONLY (تأیید عدم نشت داده به آینده؛ بدون ادعای سودآوری زنده)"
+    strat_audit_text = "در انتظار اعتبارسنجی مستقل؛ هیچ ادعایی دربارهٔ سودآوری یا نبود Lookahead تأیید نشده است."
     if strat_file.exists():
         try:
-            with open(strat_file, "r", encoding="utf-8") as f:
-                s_data = json.load(f)
-                strat_audit_text = (
-                    f"{s_data.get('outcome', 'STRUCTURAL_CHECKS_ONLY')} — "
-                    f"قرارداد سیگنال: {s_data.get('signal_contract', {}).get('status', 'N/A')}، "
-                    f"ارزیابی لحظه‌ای: {s_data.get('point_in_time', {}).get('status', 'N/A')}"
-                )
-        except Exception:
+            with strat_file.open("r", encoding="utf-8") as fp:
+                report = json.load(fp)
+            strat_audit_text = (
+                f"گزارش محلیِ تأییدنشده: {report.get('outcome', 'INCONCLUSIVE')}"
+                "؛ نتایج فقط پس از بررسی داده و آزمون مستقل معتبرند."
+            )
+        except (OSError, ValueError, TypeError):
             pass
 
     return {
         "status": "SUCCESS",
-        "last_inspection": state.get("agent_last_activity") or datetime.now(TZ_UTC).isoformat(),
+        "agent_status": state.get("agent_status", "NOT_CONNECTED"),
+        "last_inspection": state.get("agent_last_activity"),
         "discovered_issue": (
-            "عدم تطابق قیمت اسکنر تریدینگ‌ویو با فید اجرای بروکر و لزوم تفکیک کامل مرجع بصری از مظنه معامله"
+            investigated.get("subject") if investigated else
+            "هنوز بررسی ثبت‌شده‌ای از Antigravity وجود ندارد."
         ),
         "probable_cause": (
-            "تفاوت ماهیت قراردادهای آتی کامکس با اسپات CFD OANDA و عدم شفافیت لایه‌بندی داده‌های قیمت"
+            investigated.get("details") if investigated else
+            "علت هنوز توسط عامل بررسی و مستند نشده است."
         ),
         "reproduction_test": (
-            "tests/test_market_gateway.py & tests/test_session_state_machine.py"
+            investigated.get("evidence") if investigated and
+            investigated.get("phase") == "REPRODUCED" else
+            "تست بازتولید مستند نشده است."
         ),
         "proposed_patch": (
-            "معماری سه‌لایه‌ای گیت داده (لایه‌های A و B و C) + ماشین حالت ۱۰ مرحله‌ای علّی سشن‌ها"
+            proposed.get("subject") if proposed else
+            "پیشنهاد اصلاحیهٔ مستند وجود ندارد."
         ),
-        "test_outcome": "۱۰۴ آزمون مستقل با موفقیت کامل پاس شدند (کد خروج ۰)",
-        "verification_status": "تأییدشده و فعال در شاخه candidate/v5-session-lab-recovery",
-        "inspected_git_ref": "candidate/v5-session-lab-recovery (commit: 6e18724+)",
+        "test_outcome": (
+            f"{tested['phase']}: {tested.get('evidence') or 'شواهد ثبت نشده'}"
+            if tested else
+            "هنوز نتیجهٔ تستی از اجرای Antigravity ثبت نشده؛ GitHub Actions مستقل است."
+        ),
+        "verification_status": (
+            "فعالیت اخیر ثبت شده؛ اتصال زندهٔ پیوسته تأیید نشده است."
+            if state.get("agent_status") == "RECENT_ACTIVITY"
+            else "عامل متصل نیست؛ فعالیت تأییدشدهٔ جاری وجود ندارد."
+        ),
+        "inspected_git_ref": (
+            referenced["git_ref"] if referenced else "نسخهٔ بررسی‌شده ثبت نشده است."
+        ),
         "strategy_audit_result": strat_audit_text,
         "open_incidents_count": state.get("open_incidents", 0),
         "verified_fixes_count": state.get("verified_fixes", 0),
         "hypotheses_count": state.get("hypotheses_under_review", 0),
         "pending_proposals_count": state.get("pending_patch_proposals", 0),
     }
-
 
 @app.get("/api/agent/advice")
 async def get_agent_advice(limit: int = 15) -> Dict[str, Any]:
