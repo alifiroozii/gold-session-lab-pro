@@ -25,8 +25,17 @@ async function fetchTradingViewQuote() {
         const data = await res.json();
         if (data.status === "REFERENCE_ONLY" && data.quote) {
             handleTradingViewQuote(data.quote);
+        } else {
+            const indicator = document.getElementById("tvLivePrice");
+            if (indicator) {
+                indicator.textContent = "—";
+                indicator.title = "منبع مقایسه TradingView در دسترس یا تازه نیست؛ این وضعیت مجوز معامله نیست.";
+            }
         }
-    } catch (_err) {}
+    } catch (_err) {
+        const indicator = document.getElementById("tvLivePrice");
+        if (indicator) indicator.textContent = "—";
+    }
 }
 
 // Scanner quotes are unverified, display-only reference observations.
