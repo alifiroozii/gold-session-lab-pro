@@ -439,52 +439,59 @@ async def get_market_status() -> Dict[str, Any]:
 
 
 async def fetch_tradingview_quote_async() -> Optional[Dict[str, Any]]:
-    """Fetch live real-time quote for XAUUSD directly from TradingView CFD scanner."""
+    """Best-effort, UNOFFICIAL TradingView scanner reference. NEVER executable.
+
+    TradingView does not provide an open public market-data API for reuse.
+    The scanner is not a contract for executable Bid/Ask pricing, and may be
+    unavailable or restricted. We show it only if a real source timestamp
+    proves it is recent. Official embedded widgets are the safer reference.
+    """
     try:
+        import math
         url = "https://scanner.tradingview.com/cfd/scan"
         payload = {
             "symbols": {"tickers": ["OANDA:XAUUSD"]},
-            "columns": ["close", "bid", "ask", "high", "low", "open", "change", "change_abs", "volume", "time"]
+            "columns": ["close", "bid", "ask", "high", "low", "open",
+                        "change", "change_abs", "volume", "time"],
         }
         async with httpx.AsyncClient(timeout=4.0) as client:
-            res = await client.post(
-                url,
-                json=payload,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Content-Type": "application/json",
-                },
-            )
+            res = await client.post(url, json=payload, headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            })
             if res.status_code != 200:
                 return None
-            data = res.json()
-            rows = data.get("data", [])
-            if not rows:
+            rows = res.json().get("data", [])
+            if not rows or rows[0].get("s") != "OANDA:XAUUSD":
                 return None
-            d = rows[0].get("d", [])
-            if len(d) < 10:
+            fields = rows[0].get("d", [])
+            if len(fields) < 10 or fields[0] is None or fields[9] is None:
                 return None
-            bid = float(d[1]) if d[1] is not None else float(d[0])
-            ask = float(d[2]) if d[2] is not None else float(d[0])
-            spread = round(ask - bid, 2)
+            last = float(fields[0])
+            stamp = float(fields[9])
+            if stamp > 10_000_000_000:
+                stamp /= 1000  # Some sources represent epoch milliseconds.
+            if not math.isfinite(last) or last <= 0 or not math.isfinite(stamp):
+                return None
+            provider_time = datetime.fromtimestamp(stamp, tz=timezone.utc)
+            observed_time = datetime.now(timezone.utc)
+            age = (observed_time - provider_time).total_seconds()
+            if age < -5 or age > 30:
+                return None  # Market closed or quote is stale. No fake time.
             return {
                 "symbol": "XAU/USD",
                 "ticker": "OANDA:XAUUSD",
-                "price": round(float(d[0]), 2),
-                "bid": round(bid, 2),
-                "ask": round(ask, 2),
-                "spread": spread,
-                "high": round(float(d[3]), 2),
-                "low": round(float(d[4]), 2),
-                "open": round(float(d[5]), 2),
-                "change_pct": round(float(d[6]), 3),
-                "change_abs": round(float(d[7]), 3),
-                "volume": int(d[8]) if d[8] is not None else 0,
-                "timestamp": d[9],
-                "time_iso": datetime.now(timezone.utc).isoformat(),
-                "source": "TRADINGVIEW_LIVE",
+                "price": last,
+                "timestamp": int(stamp),
+                "time_iso": provider_time.isoformat(),
+                "received_at": observed_time.isoformat(),
+                "quote_age_seconds": age,
+                "source": "TRADINGVIEW_SCANNER_UNVERIFIED",
+                "data_role": "REFERENCE_ONLY",
+                "verified_for_execution": False,
             }
-    except Exception:
+    except (ValueError, TypeError, KeyError, OverflowError, OSError,
+            httpx.HTTPError, RuntimeError):
         return None
 
 
@@ -492,7 +499,7 @@ async def fetch_tradingview_quote_async() -> Optional[Dict[str, Any]]:
 async def get_tradingview_quote() -> Dict[str, Any]:
     quote = await fetch_tradingview_quote_async()
     if quote:
-        return {"status": "SUCCESS", "quote": quote}
+        return {"status": "REFERENCE_ONLY", "quote": quote}
     return {"status": "UNAVAILABLE", "message": "TradingView live quote temporarily unavailable"}
 
 
