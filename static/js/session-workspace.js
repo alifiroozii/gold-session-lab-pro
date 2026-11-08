@@ -4,6 +4,8 @@
     const colors = {sydney:'#a78bfa',tokyo:'#06b6d4',asia:'#3b82f6',london:'#10b981',new_york:'#f59e0b',overlap:'#8b5cf6'};
     let snapshot = null, fetching = false;
     const formatTime = value => new Intl.DateTimeFormat('fa-IR', {timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value * 1000));
+    const dayKey = value => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value*1000));
+    const formatEnd = session => formatTime(session.end) + (dayKey(session.end)!==dayKey(session.start) ? ' (روز بعد)' : '');
     const formatDay = value => new Intl.DateTimeFormat('fa-IR', {timeZone:'Asia/Tehran',weekday:'short',month:'short',day:'numeric'}).format(new Date(value + 'T12:00:00+03:30'));
     const node = (tag, text, className) => {const el=document.createElement(tag); if(text!==undefined) el.textContent=text; if(className) el.className=className; return el;};
     function renderHistory() {
@@ -14,7 +16,7 @@
             const row=node('tr');
             const price=s.high===null ? '—' : `${s.high.toFixed(2)} / ${s.low.toFixed(2)}`;
             const coverage=s.coverage==='COMPLETE' ? 'کامل' : (s.coverage==='PARTIAL' ? `ناقص · ${s.bars} کندل` : 'دادهٔ قیمت موجود نیست');
-            [s.label,formatTime(s.start),formatTime(s.end),stateNames[s.status],price,coverage].forEach(v=>row.append(node('td',v)));
+            [s.label,formatTime(s.start),formatEnd(s),stateNames[s.status],price,coverage].forEach(v=>row.append(node('td',v)));
             rows.append(row);
         });
     }
@@ -28,7 +30,7 @@
             if(!chosen) return;
             const card=node('article',undefined,'session-now-card'+(chosen.status==='IN_PROGRESS'?' is-active':''));
             card.style.setProperty('--session-color',colors[key]);
-            card.append(node('h3',chosen.label),node('span',stateNames[chosen.status],'session-state'),node('p',formatDay(chosen.date)),node('p',`${formatTime(chosen.start)} — ${formatTime(chosen.end)}`));
+            card.append(node('h3',chosen.label),node('span',stateNames[chosen.status],'session-state'),node('p',formatDay(chosen.date)),node('p',`${formatTime(chosen.start)} — ${formatEnd(chosen)}`));
             if(chosen.status==='IN_PROGRESS') card.append(node('p',`${Math.max(0,Math.ceil((chosen.end-data.now)/60))} دقیقه تا پایان`));
             cards.append(card);
         });
