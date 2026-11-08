@@ -50,22 +50,22 @@ class SessionManager:
         self.config = config or SessionConfig()
 
     def is_market_closed(self, dt_utc: datetime) -> bool:
-        """
-        Forex Gold market closes Friday evening (approx 22:00 UTC / 17:00 NY)
-        and re-opens Sunday evening (approx 22:00 UTC / 18:00 NY).
+        """Conservative spot-gold schedule in New York local time (DST-safe).
+
+        Never use a fixed 22:00 UTC opening: it changes during DST.
+        Provider tradeable status remains authoritative for execution.
         """
         if dt_utc.tzinfo is None:
-            dt_utc = dt_utc.replace(tzinfo=TZ_UTC)
-        weekday = dt_utc.weekday()  # Monday=0, Sunday=6
-
-        # Friday after 22:00 UTC
-        if weekday == 4 and dt_utc.time() >= time(22, 0):
+            raise ValueError("Market timestamps must be timezone-aware")
+        ny = dt_utc.astimezone(TZ_NEW_YORK)
+        day, clock = ny.weekday(), ny.time()
+        if day == 5:
             return True
-        # Saturday all day
-        if weekday == 5:
+        if day == 4 and clock >= time(17, 0):
             return True
-        # Sunday before 22:00 UTC
-        if weekday == 6 and dt_utc.time() < time(22, 0):
+        if day == 6 and clock < time(18, 0):
+            return True
+        if day in (0, 1, 2, 3) and time(17, 0) <= clock < time(18, 0):
             return True
         return False
 
@@ -179,7 +179,6 @@ class SessionManager:
                 candles[k]
                 for k in curr_indices
                 if SessionName.ASIA_REFERENCE in candle_meta[k][1]
-                or SessionName.TOKYO in candle_meta[k][1]
             ]
             london_bars = [
                 candles[k]
@@ -201,6 +200,15 @@ class SessionManager:
 
             stats_i: Dict[str, Dict[str, Optional[float]]] = {
                 "asia": _fmt_hl(asia_bars),
+                # 20:00–00:00 NY research range is distinct from Tokyo's
+                # 09:00–18:00 local session.  No signal may use its final
+                # levels before 00:00 NY on that trading day.
+                "asia_complete": (
+                    c.timestamp.astimezone(TZ_NEW_YORK).time() <
+                    self.config.asia_ref_ny_start
+                    and c.timestamp.astimezone(TZ_NEW_YORK).time() >=
+                    self.config.asia_ref_ny_end
+                ),
                 "london": _fmt_hl(london_bars),
                 "ny": _fmt_hl(ny_bars),
                 "pd": {
@@ -225,6 +233,7 @@ class SessionManager:
         """
         stats: Dict[str, Dict[str, Optional[float]]] = {
             "asia": {"high": None, "low": None, "midline": None},
+            "asia_complete": False,
             "london": {"high": None, "low": None, "midline": None},
             "ny": {"high": None, "low": None, "midline": None},
             "pd": {"high": None, "low": None, "midline": None},
