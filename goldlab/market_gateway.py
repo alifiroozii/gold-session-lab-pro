@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 from typing import Any, Dict, List, Optional
 
 from goldlab.market_safety import (
@@ -76,7 +77,7 @@ class OandaProviderAdapter(MarketDataProvider):
     def get_latest_quote(self) -> Optional[MarketQuote]:
         if not self.feed.configured:
             return None
-        return self.feed.poll_quote()
+        return self.feed.latest_quote()
 
     def get_historical_m1(self, count: int = 500) -> List[Candle]:
         if not self.feed.configured:
@@ -137,8 +138,35 @@ class MarketDataGateway:
         self._cached_tv_quote: Optional[Dict[str, Any]] = None
 
     def update_tv_reference_quote(self, quote_data: Optional[Dict[str, Any]]) -> None:
-        """Stores latest non-authoritative TradingView scanner quote for reference display."""
-        self._cached_tv_quote = quote_data
+        """Cache only correctly timestamped scanner *reference* data.
+
+        The scanner is not an execution provider; reject bad provenance.
+        Revalidate time-to-live when comparison is requested.
+        """
+        self._cached_tv_quote = None
+        if not isinstance(quote_data, dict):
+            return
+        if quote_data.get("ticker") != self.tv_reference.symbol:
+            return
+        if (quote_data.get("source") != "TRADINGVIEW_SCANNER_UNVERIFIED"
+                or quote_data.get("data_role") != "REFERENCE_ONLY"
+                or quote_data.get("verified_for_execution") is not False):
+            return
+        try:
+            price = float(quote_data["price"])
+            stamp = datetime.fromisoformat(
+                str(quote_data["time_iso"]).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError, KeyError, OverflowError):
+            return
+        if not math.isfinite(price) or price <= 0 or stamp.tzinfo is None:
+            return
+        self._cached_tv_quote = {
+            "price": price,
+            "time_iso": stamp.isoformat(),
+            "ticker": self.tv_reference.symbol,
+            "source": "TRADINGVIEW_SCANNER_UNVERIFIED",
+        }
 
     def evaluate_execution_quote(
         self, quote: Optional[MarketQuote], now: Optional[datetime] = None
@@ -160,47 +188,33 @@ class MarketDataGateway:
         now = now or datetime.now(TZ_UTC)
         gate_ok, gate_reason = self.evaluate_execution_quote(verified_quote, now=now)
 
-        # Layer A: TradingView Reference
-        tv_price = (
-            float(self._cached_tv_quote["price"])
-            if self._cached_tv_quote and "price" in self._cached_tv_quote
-            else None
-        )
-        tv_bid = (
-            float(self._cached_tv_quote["bid"])
-            if self._cached_tv_quote and "bid" in self._cached_tv_quote
-            else None
-        )
-        tv_ask = (
-            float(self._cached_tv_quote["ask"])
-            if self._cached_tv_quote and "ask" in self._cached_tv_quote
-            else None
-        )
-        tv_spread = (
-            round(tv_ask - tv_bid, 2)
-            if tv_bid is not None and tv_ask is not None
-            else None
-        )
-        tv_time = (
-            self._cached_tv_quote.get("time_iso")
-            if self._cached_tv_quote
-            else None
-        )
+        # Layer A: unofficial best-effort reference. Never invent a spread.
+        tv_price: Optional[float] = None
+        tv_time: Optional[str] = None
+        if self._cached_tv_quote:
+            stamp = datetime.fromisoformat(self._cached_tv_quote["time_iso"])
+            age = (now - stamp).total_seconds()
+            if -5 <= age <= 30:
+                tv_price = float(self._cached_tv_quote["price"])
+                tv_time = stamp.isoformat()
 
         layer_a = ComparisonItem(
             source_layer="لایه A (مرجع بصری)",
             symbol=self.tv_reference.symbol,
             provider_name=self.tv_reference.display_name,
-            data_type="مرجع نموداری تریدینگ‌ویو (غیرقابل معامله)",
+            data_type="اسکنر غیررسمی (فقط مرجع)؛ ویجت رسمی جداگانه",
             last_quote_time=tv_time,
-            bid=tv_bid,
-            ask=tv_ask,
+            bid=None,
+            ask=None,
             mid=tv_price,
-            spread=tv_spread,
-            latency_estimate="وب‌سوکت عمومی تریدینگ‌ویو (< 1 ثانیه)",
-            quote_validity="صرفاً مرجع بصری (فاقد مجوز اجرای سفارش)",
+            spread=None,
+            latency_estimate="نامشخص؛ سن مظنه با زمان منبع بررسی می‌شود",
+            quote_validity=("مرجع تازه اما غیرقابل معامله"
+                            if tv_price is not None else
+                            "مرجع ناموجود، منقضی یا تأییدنشده"),
             is_executable=False,
-            notes="ویجت رسمی تریدینگ‌ویو؛ داده‌ها از سرورهای مرکزی TradingView تأمین می‌شود.",
+            notes=("اسکنر غیررسمی، فید تضمین‌شدهٔ TradingView نیست؛ "
+                   "ویجت رسمی مستقل از این داده نمایش داده می‌شود."),
         )
 
         # Layer B: Execution Feed
@@ -228,7 +242,11 @@ class MarketDataGateway:
             ask=b_ask,
             mid=b_mid,
             spread=b_spread,
-            latency_estimate="API مستقیم v20 (< 300ms)",
+            latency_estimate=(
+                f"سن مظنه: {(now - verified_quote.timestamp).total_seconds():.1f} ثانیه؛ "
+                "تأخیر واقعی شبکه اندازه‌گیری نشده"
+                if verified_quote is not None else "بدون مظنه معتبر"
+            ),
             quote_validity=exec_validity,
             is_executable=gate_ok,
             notes="منبع قانونی دارای مجوز احراز هویت؛ تنها منبع مجاز برای شبیه‌سازی ورود/خروج.",
@@ -246,8 +264,9 @@ class MarketDataGateway:
             "price_delta": {
                 "difference_usd": delta_mid,
                 "note": (
-                    "اختلاف مظنه بروکرها (مانند OANDA CFD) با اسپات بین‌بانکی یا قراردادهای آتی کامکس (CME GC) "
-                    "ناشی از اسپرد بروکر، کارمزد تأمین مالی شبانه (Swap) و زمان رول‌اوور است و کاملاً طبیعی می‌باشد."
+                    "این اختلاف فقط زمانی محاسبه می‌شود که هر دو مشاهده تازه "
+                    "باشند. نوع قیمت (آخرین قیمت در برابر Mid مظنه) ممکن است متفاوت باشد؛ "
+                    "هیچ نتیجهٔ قطعی دربارهٔ صحت یا سودآوری نمی‌دهد."
                 ),
             },
             "execution_gate": {
