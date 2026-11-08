@@ -23,7 +23,7 @@ async function fetchTradingViewQuote() {
         const res = await fetch("/api/tradingview/quote");
         if (!res.ok) return;
         const data = await res.json();
-        if (data.status === "SUCCESS" && data.quote) {
+        if (data.status === "REFERENCE_ONLY" && data.quote) {
             handleTradingViewQuote(data.quote);
         }
     } catch (_err) {}
