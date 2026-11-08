@@ -560,7 +560,9 @@ async def set_bot_state_endpoint(req: BotStateRequest) -> Dict[str, str]:
             raise HTTPException(status_code=409, detail="PAPER_AUTO_UNVERIFIED: strategy runtime has not passed execution tests.")
         bot.set_state(new_state)
         return {"status": "success", "new_state": bot.state.value}
-    except Exception as e:
+    except HTTPException:
+        raise
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
