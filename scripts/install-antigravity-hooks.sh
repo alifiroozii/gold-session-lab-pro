@@ -19,6 +19,19 @@ done
 # does not immediately replace arbitrary code executed by Git hooks.
 cp "$root/scripts/antigravity-after-pull.sh" "$hooks/goldlab-agent-sync.sh"
 chmod 700 "$hooks/goldlab-agent-sync.sh"
+if [[ "${1:-}" == "--with-agent" ]]; then
+  if ! command -v agy >/dev/null 2>&1; then
+    echo "Antigravity CLI agy is not installed; hooks installed without headless AI."
+    rm -f "$hooks/goldlab-agent-headless-enabled"
+  else
+    cp "$root/scripts/antigravity-headless-review.sh" "$hooks/goldlab-agent-headless-review.sh"
+    chmod 700 "$hooks/goldlab-agent-headless-review.sh"
+    touch "$hooks/goldlab-agent-headless-enabled"
+    echo "Opted in to one read-only agy -p review after each git pull/rebase."
+  fi
+else
+  rm -f "$hooks/goldlab-agent-headless-enabled"
+fi
 for hook in post-merge post-rewrite; do
   cat > "$hooks/$hook" <<'HOOK'
 #!/bin/sh
@@ -33,4 +46,6 @@ HOOK
 done
 echo 'Antigravity handoff hooks installed for this local clone.'
 echo 'After git pull (merge/rebase), a task snapshot is generated, and on macOS the Antigravity app may open if installed.'
-echo 'Opening an IDE is NOT evidence that an AI agent is connected, running or executing tasks.'
+echo 'Opening an IDE alone is not evidence of an active agent.'
+echo 'Use --with-agent only after installing and authenticating official Antigravity CLI.'
+echo 'The optional CLI run is read-only; it does not deploy changes or activate PAPER_AUTO.'
