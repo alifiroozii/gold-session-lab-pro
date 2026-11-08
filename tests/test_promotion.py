@@ -32,7 +32,7 @@ def test_challenger_promotion_evaluation_criteria(test_db_path):
     )
     eval_weak = mgr.evaluate_challenger_promotion(challenger_weak.version_id)
     assert eval_weak["eligible"] is False
-    assert eval_weak["checks"]["sample_size_ok"] is False
+    assert "validated" in eval_weak["reason"]
 
     # 2. Even a strong-looking challenger cannot beat an unvalidated baseline.
     challenger_strong = mgr.register_version(
