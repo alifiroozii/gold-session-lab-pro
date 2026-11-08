@@ -8,6 +8,8 @@ let currentCandles = [];
 let replayIndex = 0;
 let isReplaying = false;
 let replayTimer = null;
+let currentMarketData = null;
+let activePriceLines = [];
 
 // --- تابع جامع تبدیل تاریخ میلادی به تاریخ خورشیدی شمسی (Jalali / Solar Hijri) ---
 function toShamsiDateTime(dateInput, includeTime = true) {
@@ -166,6 +168,7 @@ async function fetchMarketData() {
 
 function renderMarketData(data) {
     if (!data || !data.candles || data.candles.length === 0) return;
+    currentMarketData = data;
     currentCandles = data.candles;
     replayIndex = currentCandles.length;
 
@@ -186,7 +189,7 @@ function renderMarketData(data) {
     document.getElementById("quoteBid").innerText = bid.toFixed(2);
     document.getElementById("quoteAsk").innerText = ask.toFixed(2);
 
-    // Update Levels
+    // Update Levels labels
     const stats = data.session_stats || {};
     if (stats.asia) {
         document.getElementById("lblAsiaH").innerText = stats.asia.high ?? "-";
@@ -202,44 +205,8 @@ function renderMarketData(data) {
         document.getElementById("lblPDL").innerText = stats.pd.low ?? "-";
     }
 
-    // Set Markers on Chart
-    const markers = [];
-    if (data.signals) {
-        data.signals.forEach(s => {
-            markers.push({
-                time: s.time,
-                position: s.direction === "BUY" ? "belowBar" : "aboveBar",
-                color: s.direction === "BUY" ? "#2563EB" : "#D6A54B",
-                shape: s.direction === "BUY" ? "arrowUp" : "arrowDown",
-                text: `${s.setup_name} (${s.direction})`
-            });
-        });
-    }
-
-    if (data.trades) {
-        data.trades.forEach(t => {
-            if (t.outcome === "WIN") {
-                markers.push({
-                    time: Math.floor(new Date(t.entry_time).getTime() / 1000),
-                    position: "inBar",
-                    color: "#16A34A",
-                    shape: "circle",
-                    text: `برد: +${t.realized_r}R`
-                });
-            } else if (t.outcome === "LOSS") {
-                markers.push({
-                    time: Math.floor(new Date(t.entry_time).getTime() / 1000),
-                    position: "inBar",
-                    color: "#DC2626",
-                    shape: "circle",
-                    text: `ضرر: -1R`
-                });
-            }
-        });
-    }
-
-    markers.sort((a, b) => a.time - b.time);
-    candleSeries.setMarkers(markers);
+    // Render Clean Layers (Levels, Trades, Signals on Demand)
+    updateChartLayers();
 
     // Update Signals Table
     renderSignalsTable(data.signals || []);
@@ -252,6 +219,100 @@ function renderMarketData(data) {
         document.getElementById("stratMaxDD").innerText = `حداکثر افت: ${data.metrics.max_drawdown_r ?? 0.0} R`;
         document.getElementById("totalTradesCount").innerText = `تعداد معاملات: ${data.metrics.total_trades ?? 0}`;
     }
+}
+
+function updateChartLayers() {
+    if (!currentMarketData || !candleSeries) return;
+
+    const showSignals = document.getElementById("toggleSignals")?.checked || false;
+    const showTrades = document.getElementById("toggleTrades")?.checked || false;
+    const showLevels = document.getElementById("toggleLevels")?.checked || false;
+
+    // 1. Manage Horizontal Price Lines (Levels)
+    activePriceLines.forEach(line => {
+        try { candleSeries.removePriceLine(line); } catch (e) {}
+    });
+    activePriceLines = [];
+
+    const stats = currentMarketData.session_stats || {};
+    if (showLevels) {
+        if (stats.asia && stats.asia.high) {
+            activePriceLines.push(candleSeries.createPriceLine({
+                price: stats.asia.high,
+                color: "#F59E0B",
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: "سقف آسیا (Asia High)",
+            }));
+        }
+        if (stats.asia && stats.asia.low) {
+            activePriceLines.push(candleSeries.createPriceLine({
+                price: stats.asia.low,
+                color: "#F59E0B",
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: "کف آسیا (Asia Low)",
+            }));
+        }
+        if (stats.pd && stats.pd.high) {
+            activePriceLines.push(candleSeries.createPriceLine({
+                price: stats.pd.high,
+                color: "#2563EB",
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: "PDH",
+            }));
+        }
+        if (stats.pd && stats.pd.low) {
+            activePriceLines.push(candleSeries.createPriceLine({
+                price: stats.pd.low,
+                color: "#2563EB",
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: "PDL",
+            }));
+        }
+    }
+
+    // 2. Manage Markers
+    const markers = [];
+
+    // Executed Paper Trades (High priority, clean and minimal)
+    if (showTrades && currentMarketData.trades) {
+        currentMarketData.trades.forEach(t => {
+            const isWin = t.outcome === "WIN";
+            markers.push({
+                time: Math.floor(new Date(t.entry_time).getTime() / 1000),
+                position: isWin ? "aboveBar" : "belowBar",
+                color: isWin ? "#16A34A" : "#DC2626",
+                shape: isWin ? "arrowDown" : "arrowUp",
+                text: isWin ? `برد +${t.realized_r}R` : "ضرر -1R"
+            });
+        });
+    }
+
+    // Setup Signals (Only enabled when toggle is explicitly checked; max 20 recent signals with sleek short code)
+    if (showSignals && currentMarketData.signals) {
+        const recentSignals = currentMarketData.signals.slice(-20);
+        recentSignals.forEach(s => {
+            const shortCode = s.setup_id.split('_')[0] || "SIG";
+            const isBuy = s.direction === "BUY";
+            markers.push({
+                time: s.time,
+                position: isBuy ? "belowBar" : "aboveBar",
+                color: isBuy ? "#3B82F6" : "#EAB308",
+                shape: isBuy ? "arrowUp" : "arrowDown",
+                text: `${shortCode} ${isBuy ? 'خرید' : 'فروش'}`
+            });
+        });
+    }
+
+    markers.sort((a, b) => a.time - b.time);
+    candleSeries.setMarkers(markers);
 }
 
 // 5. Switch Timeframe
@@ -524,6 +585,11 @@ function initForms() {
 
     // Backtest Comparison Button
     document.getElementById("btnRunComparison")?.addEventListener("click", runStrategyComparison);
+
+    // Chart Layer Toggles (Declutter)
+    document.getElementById("toggleSignals")?.addEventListener("change", updateChartLayers);
+    document.getElementById("toggleTrades")?.addEventListener("change", updateChartLayers);
+    document.getElementById("toggleLevels")?.addEventListener("change", updateChartLayers);
 }
 
 // 10. Bot Management
