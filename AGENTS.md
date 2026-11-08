@@ -49,3 +49,19 @@ installed capabilities instead of guessing an Antigravity CLI syntax.
 All self-modifying changes MUST be staged, tested, reviewed, and reversible.
 Do not change order execution, risk thresholds, ledger, broker, security policy
 or the live champion without explicit user approval. Never assume profitability.
+
+
+## Mandatory strategy verification gate (added 2026-11-08)
+Before Antigravity calls a session strategy "correct", "fixed", or "improved":
+1. Read `docs/STRATEGY_VERIFICATION.md` and lock the exact machine-testable entry rules.
+2. Run `python -m pytest -q tests/test_strategy_verification.py`.
+3. If `GOLDLAB_STRATEGY_AUDIT_CSV` points to a provenance-verified historical
+   XAUUSD CSV, run `python -m scripts.verify_strategy "$GOLDLAB_STRATEGY_AUDIT_CSV" --timeframe 5m`;
+   inspect `reports/STRATEGY_VALIDATION.json` for structural and point-in-time divergences.
+4. If no verified dataset is available, explicitly record STRATEGY_AUDIT_SKIPPED;
+   never substitute demo candles or mark the strategy as validated.
+5. On HISTORICAL_SIGNAL_CHANGED, prioritize per-decision session levels / future-bar
+   leakage and reproduce the issue in a separate worktree before proposing a code change.
+6. Show real CI/check exit codes and exact Git SHA. A PASS means only those checks
+   passed, not that the strategy has proven an edge or may activate PAPER_AUTO.
+7. Do not interpret losing trades as a bug without a demonstrated rule violation.
