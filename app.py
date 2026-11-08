@@ -125,7 +125,7 @@ if market_feed.configured:
     try:
         candles = market_feed.historical_m1()
         if candles:
-            engine.load_candles(candles, timeframe="5m")
+            engine.load_candles(candles, timeframe="5m", require_complete=True)
             engine.market_data_source = "OANDA_HISTORICAL_MID"
             engine.run_pipeline()
     except Exception:
@@ -322,7 +322,7 @@ async def market_heartbeat_loop() -> None:
                 try:
                     bars = await asyncio.to_thread(market_feed.historical_m1)
                     if bars:
-                        engine.load_candles(bars, timeframe=engine.current_timeframe)
+                        engine.load_candles(bars, timeframe=engine.current_timeframe, require_complete=True)
                         engine.market_data_source = "OANDA_HISTORICAL_MID"
                         engine.run_pipeline()
                         if verified_quote:
@@ -330,7 +330,8 @@ async def market_heartbeat_loop() -> None:
                                 bars,
                                 current_bid=verified_quote.bid,
                                 current_ask=verified_quote.ask,
-                                current_time=bars[-1].timestamp,
+                                current_time=verified_quote.timestamp,
+                                strict_provider=True,
                             )
                             if bot_signals:
                                 await ws_manager.broadcast_json({
