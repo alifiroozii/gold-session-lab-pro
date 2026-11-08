@@ -1,0 +1,76 @@
+name: Export source-only ZIP
+on:
+  push:
+    branches:
+      - 'fix/**'
+    paths:
+      - '.github/workflows/export-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assemble clean source tree without packages, secrets or generated state
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, shutil, subprocess
+          root = pathlib.Path('.').resolve()
+          out = root / 'export' / 'gold-session-lab-pro'
+          out.mkdir(parents=True, exist_ok=True)
+          files = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          excluded_dirs = {
+              '.git', '.venv', 'venv', 'env', 'node_modules', 'vendor',
+              '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
+              '.tox', '.next', 'dist', 'build', 'site-packages',
+              '.idea', '.vscode',
+          }
+          sensitive_extensions = {'.sqlite', '.db', '.log', '.pyc', '.pyo', '.key', '.pem', '.p12'}
+          count = 0
+          for item in files:
+              if not item:
+                  continue
+              p = pathlib.PurePosixPath(item)
+              if p.is_absolute() or '..' in p.parts or set(p.parts) & excluded_dirs:
+                  continue
+              if p.name == '.env' or p.name.startswith('.env.') and p.name != '.env.example':
+                  continue
+              if p.suffix.lower() in sensitive_extensions:
+                  continue
+              if any(part.lower() in ('credentials', 'secrets') for part in p.parts):
+                  continue
+              src = root / item
+              if not src.is_file() or src.is_symlink():
+                  continue
+              dest = out / item
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copy2(src,dest)
+              count += 1
+          if count < 20:
+              raise SystemExit(f'Unexpectedly few source files: {count}')
+          (out / 'SOURCE_EXPORT_INFO.txt').write_text(
+              'Gold Session Lab Pro source-only export\n'
+              'Source ref: ' + subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip() + '\n'
+              'Includes Python/JS/HTML/CSS source, tests, configs and dependency manifests.\n'
+              'Excludes installed packages, Git history, virtualenvs, caches, SQLite and secrets.\n'
+              'This is NOT a standalone executable and still requires dependency installation.\n',
+              encoding='utf-8')
+          print(f'Exported {count} tracked source files.')
+          PY
+      - name: Upload source-only archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-session-lab-pro-source-only
+          path: export/gold-session-lab-pro/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
