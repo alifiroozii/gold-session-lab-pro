@@ -392,9 +392,11 @@ async def shutdown_event() -> None:
 def get_execution_status() -> Dict[str, Any]:
     allowed, reason = execution_gate(verified_quote)
     spec = InstrumentSpecification()
+    demo_chart = engine.market_data_source == "DEMO_CSV"
     return {
         "market_open": allowed,
-        "paper_orders_allowed": allowed,
+        "paper_orders_allowed": allowed and not demo_chart,
+        "chart_is_synthetic": demo_chart,
         "paper_auto_allowed": False,
         "reason": reason if not allowed else "VERIFIED_LIVE_PRICE",
         "quote_source": verified_quote.source if verified_quote else None,
@@ -585,7 +587,12 @@ async def set_market_timeframe(req: TimeframeRequest) -> Dict[str, str]:
 
 @app.post("/api/market/load-demo")
 async def load_demo_data() -> Dict[str, Any]:
-    """Loads session analysis dataset into the chart engine."""
+    """Explicit educational replay only. Never silently load fake prices."""
+    if os.getenv("GOLDLAB_ENABLE_DEMO_REPLAY", "0") != "1":
+        raise HTTPException(
+            status_code=403,
+            detail="Demo replay is disabled. Set GOLDLAB_ENABLE_DEMO_REPLAY=1 explicitly.",
+        )
     if DEMO_CSV.exists():
         engine.load_from_csv(DEMO_CSV, timeframe=engine.current_timeframe)
         engine.market_data_source = "DEMO_CSV"
@@ -761,6 +768,8 @@ async def submit_order_endpoint(req: OrderRequest) -> Dict[str, Any]:
     order_type = OrderType(req.order_type.upper())
 
     allowed, reason = execution_gate(verified_quote)
+    if engine.market_data_source == "DEMO_CSV":
+        raise HTTPException(status_code=409, detail="Order blocked: synthetic chart replay active")
     if not allowed:
         raise HTTPException(status_code=409, detail=f"Order blocked: {reason}")
     assert verified_quote is not None
