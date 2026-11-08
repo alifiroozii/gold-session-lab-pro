@@ -884,6 +884,7 @@ function initWebSocket() {
                 if (!isReplaying) fetchMarketData();
             } else if (msg.type === "AGENT_OBSERVATIONS") {
                 fetchAntigravityActivity();
+                fetchAgentAdvice();
             } else if (msg.type === "FILL") {
                 fetchBrokerData();
             }
@@ -903,8 +904,10 @@ function initWebSocket() {
 document.addEventListener("DOMContentLoaded", () => {
     fetchResearchData();
     fetchAntigravityActivity();
+    fetchAgentAdvice();
     setInterval(fetchResearchData, 6000);
     setInterval(fetchAntigravityActivity, 10000);
+    setInterval(fetchAgentAdvice, 15000);
 
     const btnHypo = document.getElementById("btnNewHypothesis");
     if (btnHypo) {
@@ -1225,6 +1228,26 @@ async function fetchAntigravityActivity() {
     } catch(_err) {
         const badge = document.getElementById("agentConnectionStatus");
         if (badge) badge.textContent = "خطا در خواندن وضعیت Agent";
+    }
+}
+
+async function fetchAgentAdvice() {
+    const el = document.getElementById("agentNextTimeAdvice");
+    if (!el) return;
+    try {
+        const resp = await fetch("/api/agent/advice?limit=8", {cache:"no-store"});
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const items = data.items || [];
+        el.innerHTML = items.length ? items.map(item => `
+            <div class="agent-event">
+                <span class="agent-event-time">${safeText(toShamsiDateTime(item.timestamp))}</span>
+                <strong>${safeText(item.reason)}</strong>
+                <span>${safeText(item.guidance)}</span>
+                <small>قانون ایمنی ثبت‌شده؛ نه توصیهٔ مبتنی بر یادگیری یا معاملهٔ خودکار</small>
+            </div>`).join("") : "هنوز هشدار ایمنی مشاهده و ثبت نشده است.";
+    } catch (_err) {
+        el.textContent = "دریافت دفترچهٔ ایمنی ناموفق بود.";
     }
 }
 
