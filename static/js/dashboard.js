@@ -11,6 +11,7 @@ let replayTimer = null;
 let currentMarketData = null;
 let activePriceLines = [];
 let sessionRectangles = [];
+let liveQuoteLine = null;
 
 // --- تابع جامع تبدیل تاریخ میلادی به تاریخ خورشیدی شمسی (Jalali / Solar Hijri) ---
 function toShamsiDateTime(dateInput, includeTime = true) {
@@ -173,7 +174,24 @@ async function fetchMarketData() {
 }
 
 function renderMarketData(data) {
-    if (!data || !data.candles || data.candles.length === 0) return;
+    if (!data) return;
+    const label = document.getElementById("dataSourceLabel");
+    const sourceText = data.data_source === "OANDA_HISTORICAL_MID"
+        ? "کندل‌های واقعی OANDA (Mid، بسته‌شده) + قیمت لحظه‌ای Bid/Ask"
+        : (data.data_source === "DEMO_CSV"
+            ? "حالت بازپخش آموزشی — داده ساختگی، غیرقابل معامله"
+            : "بدون داده معتبر؛ برای نمایش چارت واقعی فید OANDA را متصل کنید");
+    if (label) label.textContent = "چارت: " + sourceText;
+    if (data.execution) updateExecutionBadge(data.execution);
+    if (!data.candles || data.candles.length === 0) {
+        currentMarketData = data;
+        currentCandles = [];
+        sessionRectangles = [];
+        if (candleSeries) candleSeries.setData([]);
+        removeLiveQuoteLine();
+        requestAnimationFrame(drawSessionBoxes);
+        return;
+    }
     currentMarketData = data;
     sessionRectangles = data.session_boxes || [];
     currentCandles = data.candles;
@@ -191,9 +209,7 @@ function renderMarketData(data) {
 
     // Update Quote Box
     const lastBar = currentCandles[currentCandles.length - 1];
-    const label = document.getElementById("dataSourceLabel");
-    if (label) label.textContent = "چارت: " + (data.data_source === "DEMO_CSV" ? "داده ساختگی آموزشی — غیرقابل معامله" : (data.data_source || "تاریخی / نامشخص"));
-    if (data.execution) updateExecutionBadge(data.execution);
+    // The provider label and execution status are updated before chart rendering.
 
     // Update Levels labels
     const stats = data.session_stats || {};
@@ -372,6 +388,27 @@ function drawSessionBoxes() {
     }
 }
 
+function removeLiveQuoteLine() {
+    if (liveQuoteLine && candleSeries) {
+        try { candleSeries.removePriceLine(liveQuoteLine); } catch (_err) {}
+    }
+    liveQuoteLine = null;
+}
+
+function updateLiveQuoteLine(bid, ask) {
+    if (!candleSeries || !currentMarketData ||
+        currentMarketData.data_source !== "OANDA_HISTORICAL_MID") return;
+    if (!Number.isFinite(bid) || !Number.isFinite(ask) || ask <= bid) return;
+    const mid = (bid + ask) / 2;
+    if (!liveQuoteLine) {
+        liveQuoteLine = candleSeries.createPriceLine({
+            price: mid, color: "#16A34A", lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: true, title: "OANDA Mid لحظه‌ای (نقل‌قول)",
+        });
+    } else liveQuoteLine.applyOptions({price: mid});
+}
+
 function updateExecutionBadge(execution) {
     const gate = document.getElementById("marketGateText");
     if (gate) gate.textContent = execution.paper_orders_allowed
@@ -384,10 +421,10 @@ function updateExecutionBadge(execution) {
     const bid = document.getElementById("quoteBid");
     const ask = document.getElementById("quoteAsk");
     const spread = document.getElementById("quoteSpread");
-    if (bid) bid.textContent = execution.bid == null ? "—" : Number(execution.bid).toFixed(2);
-    if (ask) ask.textContent = execution.ask == null ? "—" : Number(execution.ask).toFixed(2);
+    if (bid) bid.textContent = execution.bid_display || (execution.bid == null ? "—" : String(execution.bid));
+    if (ask) ask.textContent = execution.ask_display || (execution.ask == null ? "—" : String(execution.ask));
     if (spread) spread.textContent = execution.bid == null || execution.ask == null
-        ? "—" : "$" + (execution.ask-execution.bid).toFixed(2);
+        ? "—" : "$" + (execution.spread_display || String(execution.ask - execution.bid));
     const feed = document.getElementById("feedStatusText");
     if (feed) feed.textContent = execution.paper_orders_allowed ? "قیمت تأیید شده" : "فید زنده نامعتبر / بسته";
     const manual = document.getElementById("btnSubmitOrder");
@@ -395,6 +432,7 @@ function updateExecutionBadge(execution) {
     const auto = document.getElementById("btnBotAuto");
     // Auto trading is blocked until the next-bar causal bot logic is verified.
     if (auto) auto.disabled = true;
+    if (!execution.paper_orders_allowed) removeLiveQuoteLine();
 }
 async function fetchMarketStatus() {
     try {
@@ -830,13 +868,30 @@ function initWebSocket() {
         ws = new WebSocket(wsUrl);
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
-            if (msg.type === "TICK") {
-                if (msg.verified === true) fetchMarketStatus();
+            if (msg.type === "TICK" && msg.verified === true) {
+                updateExecutionBadge({
+                    paper_orders_allowed: true, reason: "VERIFIED_LIVE_PRICE",
+                    quote_time: msg.timestamp, bid: msg.bid, ask: msg.ask,
+                    bid_display: msg.bid_display, ask_display: msg.ask_display,
+                });
+                updateLiveQuoteLine(Number(msg.bid), Number(msg.ask));
+            } else if (msg.type === "MARKET_STATUS") {
+                updateExecutionBadge({
+                    paper_orders_allowed: false,
+                    reason: msg.status || "LIVE_STREAM_DISCONNECTED",
+                });
+            } else if (msg.type === "CANDLES_UPDATED") {
+                if (!isReplaying) fetchMarketData();
+            } else if (msg.type === "AGENT_OBSERVATIONS") {
+                fetchAntigravityActivity();
             } else if (msg.type === "FILL") {
                 fetchBrokerData();
             }
         };
         ws.onclose = () => {
+            updateExecutionBadge({
+                paper_orders_allowed: false, reason: "ارتباط لحظه‌ای با سرور قطع شد"
+            });
             setTimeout(initWebSocket, 3000);
         };
     } catch (e) {
