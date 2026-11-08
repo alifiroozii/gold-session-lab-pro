@@ -7,10 +7,10 @@ Implements a strict three-layer data architecture:
 """
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import math
 from typing import Any, Dict, List, Optional
 
 from goldlab.market_safety import (

@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple
+
+if TYPE_CHECKING:
+    from goldlab.state_machine import SessionTradingStateMachine
 
 from goldlab.engine import ResearchEngine
 from goldlab.paper_broker import OrderDirection, OrderType, PaperBroker
@@ -54,6 +57,7 @@ class AutomatedPaperBot:
         engine: Optional[ResearchEngine] = None,
         risk_settings: Optional[BotRiskSettings] = None,
         db_path: str = "data/xauusd_lab.sqlite",
+        state_machine: Optional[SessionTradingStateMachine] = None,
     ) -> None:
         self.bot_id = bot_id
         self.account_id = account_id
@@ -61,6 +65,7 @@ class AutomatedPaperBot:
         self.engine = engine or ResearchEngine(db_path=db_path)
         self.risk = risk_settings or BotRiskSettings()
         self.db_path = Path(db_path)
+        self.state_machine = state_machine
 
         self.state: BotState = BotState.ANALYSIS_ONLY
         self.today_trades_count: int = 0
@@ -386,6 +391,8 @@ class AutomatedPaperBot:
                     current_bid=current_bid,
                     current_ask=current_ask,
                 )
+                if self.state_machine:
+                    self.state_machine.on_order_dispatched(order.order_id, last_candle)
                 self.dispatched_signals.add(sig_key)
                 self.log_event(
                     "ORDER_DISPATCHED",

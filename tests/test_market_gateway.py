@@ -74,8 +74,9 @@ def test_market_gateway_comparison_with_live_quotes():
 
 
 def test_gateway_adapter_calls_existing_read_only_latest_quote_method():
-    from goldlab.market_gateway import OandaProviderAdapter
     from unittest.mock import Mock
+
+    from goldlab.market_gateway import OandaProviderAdapter
     adapter = OandaProviderAdapter(feed=Mock(configured=True))
     adapter.get_latest_quote()
     adapter.feed.latest_quote.assert_called_once_with()

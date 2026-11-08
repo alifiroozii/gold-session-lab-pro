@@ -683,6 +683,76 @@
                 </div>
             </div>
 
+            <!-- Shadow Mode Proposals Box -->
+            <div class="content-box mt-4">
+                <div class="broker-actions-bar">
+                    <div>
+                        <h3 class="card-heading">👁️ پیشنهادهای ستاپ در حالت سایه (Shadow Mode Proposals)</h3>
+                        <p class="text-muted">ارزیابی برخط کندل‌های بسته شده ۵ دقیقه‌ای توسط ماشین حالت بدون ارسال سفارش واقعی؛ بررسی علل رد به دلیل اسپرد، ریسک یا اخبار کلان.</p>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="data-table" id="shadowProposalsTable">
+                        <thead>
+                            <tr>
+                                <th>شناسه</th>
+                                <th>زمان کندل (UTC)</th>
+                                <th>استراتژی / ستاپ</th>
+                                <th>جهت</th>
+                                <th>سطح سشن هدف</th>
+                                <th>ورود پیشنهادی</th>
+                                <th>حد ضرر / تارگت</th>
+                                <th>اسپرد ($)</th>
+                                <th>وضعیت فیلتر</th>
+                                <th>علت / توضیح به زبان فارسی</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="10" class="text-center text-muted">در حال بارگذاری پیشنهادهای حالت سایه...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Strategy Validation Laboratory Box (OOS Walk-Forward) -->
+            <div class="content-box mt-4">
+                <div class="broker-actions-bar">
+                    <div>
+                        <h3 class="card-heading">🔬 آزمایشگاه اعتبارسنجی استراتژی (Strategy Validation Laboratory)</h3>
+                        <p class="text-muted">آزمون حرکت به جلو خارج از نمونه (۷۰٪ آموزش در برابر ۳۰٪ تست holdout)؛ تفکیک دیتای دمو از دیتای واقعی با امضای معتبر.</p>
+                    </div>
+                </div>
+                <div class="stat-highlight-row mt-3" id="validationMetricsRow">
+                    <div class="mini-stat">
+                        <span class="mini-label">حکم اعتبارسنجی:</span>
+                        <strong id="valVerdict" class="text-blue">—</strong>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-label">اصالت داده‌ها:</span>
+                        <strong id="valProvenance" class="text-red">تأییدنشده (دمو)</strong>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-label">نرخ برد خارج از نمونه:</span>
+                        <strong id="valWinRate">—</strong>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-label">ضریب سود خارج از نمونه:</span>
+                        <strong id="valProfitFactor">—</strong>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-label">امید ریاضی (R):</span>
+                        <strong id="valExpectancy">—</strong>
+                    </div>
+                    <div class="mini-stat">
+                        <span class="mini-label">مجوز معامله خودکار:</span>
+                        <strong id="valPaperAuto" class="badge-risk-high">غیرمجاز ❌</strong>
+                    </div>
+                </div>
+                <div class="regime-desc-card mt-3" id="valSummaryDesc">
+                    در حال بارگذاری گزارش اعتبارسنجی مستقل...
+                </div>
+            </div>
+
             <!-- Collapsible: Backtest & Strategy Comparison -->
             <div class="content-box mt-4">
                 <details class="section-accordion">

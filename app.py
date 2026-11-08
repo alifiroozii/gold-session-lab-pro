@@ -47,6 +47,7 @@ from goldlab.promotion import ChampionChallengerManager
 from goldlab.regime import MarketRegimeMonitor
 from goldlab.review_journal import DecisionJournal
 from goldlab.state_machine import SessionTradingStateMachine
+from goldlab.strategy_validation_lab import StrategyValidationLab
 from goldlab.supervisor import JobType, ResearchSupervisor
 
 TZ_UTC = timezone.utc
@@ -92,9 +93,14 @@ broker = PaperBroker(db_path=DB_PATH)
 strategy_engine = ResearchEngine(db_path=DB_PATH)
 strategy_engine.current_timeframe = "5m"
 bot = AutomatedPaperBot(
-    account_id="ACC_DEFAULT", broker=broker, engine=strategy_engine, db_path=DB_PATH
+    account_id="ACC_DEFAULT",
+    broker=broker,
+    engine=strategy_engine,
+    db_path=DB_PATH,
+    state_machine=session_state_machine,
 )
 backtester = BacktestingEngine(db_path=DB_PATH)
+validation_lab = StrategyValidationLab(db_path=DB_PATH, reports_dir=str(REPORTS_DIR))
 
 # Autonomous Research & Safety Engines
 guardian = IndependentRiskGuardian(db_path=DB_PATH)
@@ -258,6 +264,12 @@ async def oanda_stream_loop() -> None:
                             pos = broker.positions.get(pid)
                             if pos and pos.status.value == "CLOSED":
                                 bot.on_trade_closed(pos.realized_pnl)
+                                if session_state_machine.active_setup:
+                                    session_state_machine.on_position_closed(
+                                        exit_price=pos.close_price if pos.close_price is not None else pos.current_price,
+                                        pnl=pos.realized_pnl,
+                                        close_reason=pos.close_reason or "CLOSED",
+                                    )
                                 if agent_bridge.record_closed_paper_trade(
                                     trade_id=pid, direction=pos.direction.value,
                                     entry_price=pos.entry_price,
@@ -267,6 +279,10 @@ async def oanda_stream_loop() -> None:
                                     quote_source=quote.source,
                                 ):
                                     closed.append(pid)
+                        for pid, pos in broker.positions.items():
+                            if pid not in opened_before and pos.status.value == "OPEN":
+                                if session_state_machine.active_setup:
+                                    session_state_machine.on_position_opened(pid, pos.entry_price)
                         if closed:
                             count = agent_bridge.observe_local_issues()
                             await asyncio.to_thread(agent_bridge.write_handoff)
@@ -339,6 +355,13 @@ async def market_heartbeat_loop() -> None:
                         engine.load_candles(bars, timeframe=engine.current_timeframe, require_complete=True)
                         engine.market_data_source = "OANDA_HISTORICAL_MID"
                         engine.run_pipeline()
+                        if engine.current_candles:
+                            await asyncio.to_thread(
+                                session_state_machine.process_completed_5m_candles,
+                                engine.current_candles,
+                                live_quote=verified_quote,
+                                calendar=engine.calendar,
+                            )
                         if verified_quote:
                             bot_signals = bot.on_candle_close(
                                 bars,
@@ -541,6 +564,31 @@ async def get_strategy_state() -> Dict[str, Any]:
     return result
 
 
+@app.get("/api/strategy/shadow-proposals")
+async def get_strategy_shadow_proposals(limit: int = 20) -> List[Dict[str, Any]]:
+    """Returns recent shadow proposals evaluated by the causal state machine."""
+    return session_state_machine.get_shadow_proposals(limit=limit)
+
+
+@app.get("/api/strategy/validation-report")
+async def get_strategy_validation_report() -> Dict[str, Any]:
+    """Returns the causal out-of-sample walk-forward validation report."""
+    from dataclasses import asdict
+    strat_file = REPORTS_DIR / "STRATEGY_VALIDATION.json"
+    if strat_file.exists():
+        try:
+            with strat_file.open("r", encoding="utf-8") as fp:
+                return json.load(fp)
+        except Exception:
+            pass
+    rep = validation_lab.run_validation(
+        csv_path=DEMO_CSV if DEMO_CSV.exists() else None,
+        candles=engine.current_candles if engine.current_candles else None,
+        timeframe=engine.current_timeframe,
+    )
+    return asdict(rep)
+
+
 # --- Pydantic Request Models ---
 class TimeframeRequest(BaseModel):
     timeframe: str
@@ -632,6 +680,11 @@ async def load_demo_data() -> Dict[str, Any]:
         engine.load_from_csv(DEMO_CSV, timeframe=engine.current_timeframe)
         engine.market_data_source = "DEMO_CSV"
         engine.run_pipeline()
+        session_state_machine.process_completed_5m_candles(
+            engine.current_candles,
+            live_quote=None,
+            calendar=engine.calendar,
+        )
         return {
             "status": "SUCCESS",
             "message": "داده‌های سشن‌ها بارگذاری شدند.",
@@ -1011,7 +1064,11 @@ async def get_supervisor_report() -> Dict[str, Any]:
     return {
         "status": "SUCCESS",
         "agent_status": state.get("agent_status", "NOT_CONNECTED"),
-        "last_inspection": state.get("agent_last_activity"),
+        "last_inspection": (
+            state.get("agent_last_activity")
+            if state.get("agent_status") == "RECENT_ACTIVITY"
+            else None
+        ),
         "discovered_issue": (
             investigated.get("subject") if investigated else
             "هنوز بررسی ثبت‌شده‌ای از Antigravity وجود ندارد."

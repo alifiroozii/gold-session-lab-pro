@@ -85,8 +85,9 @@ def test_chart_requires_real_feed_without_hidden_demo_fallback() -> None:
 
 
 def test_synthetic_replay_cannot_authorize_market_order(monkeypatch) -> None:
-    from app import app, engine
     from fastapi.testclient import TestClient
+
+    from app import app, engine
     with monkeypatch.context() as context:
         context.setattr(engine, "market_data_source", "DEMO_CSV")
         res = TestClient(app).post("/api/broker/order", json={

@@ -1,7 +1,7 @@
 """
-Causal Event-Driven Session Trading State Machine for XAUUSD (Master Prompt V5).
+Causal Event-Driven Session Trading State Machine for XAUUSD (Master Prompt V6).
 Enforces a strict 10-state progression with zero lookahead, deterministic SQLite logging,
-and fail-closed risk management:
+Shadow Mode proposal evaluation, and fail-closed risk management:
 - WAITING_FOR_SESSION
 - BUILDING_RANGE
 - RANGE_FINALIZED
@@ -19,11 +19,13 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import asdict, dataclass
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from goldlab.calendar import MacroNewsCalendar
+from goldlab.market_safety import MarketQuote
 from goldlab.sessions import SessionManager
 from goldlab.types import Candle, SessionName, SetupSignal, SignalDirection
 
@@ -80,17 +82,37 @@ class ActiveSetupContext:
     risk_r: float = 0.0
     order_id: Optional[str] = None
     position_id: Optional[str] = None
+    bars_in_state: int = 0
+
+
+@dataclass
+class ShadowProposal:
+    proposal_id: str
+    candle_id: str
+    timestamp: str
+    direction: str
+    setup_name: str
+    target_level: str
+    target_price: float
+    entry_price: float
+    sl_price: float
+    tp_price: float
+    risk_r: float
+    spread: Optional[float]
+    status: str  # "ELIGIBLE_SHADOW", "REJECTED_SPREAD", "REJECTED_NEWS", "REJECTED_RISK"
+    rejection_reason: str
 
 
 class SessionTradingStateMachine:
     """
     Evaluates market candles sequentially and causally.
-    Transitions through 10 formal states and logs all state changes into SQLite.
+    Transitions through 10 formal states, records all state changes and shadow proposals
+    into SQLite, and enforces restart recovery.
     """
 
     def __init__(
         self,
-        strategy_version: str = "v5.0.0-causal",
+        strategy_version: str = "v6.0.0-causal",
         source_data: str = "OANDA_V20",
         db_path: str = "data/xauusd_lab.sqlite",
         session_mgr: Optional[SessionManager] = None,
@@ -98,6 +120,8 @@ class SessionTradingStateMachine:
         min_wick_ratio: float = 0.35,
         risk_reward_ratio: float = 2.0,
         atr_multiplier: float = 1.0,
+        shadow_mode: bool = True,
+        max_spread: float = 0.50,
     ) -> None:
         self.strategy_version = strategy_version
         self.source_data = source_data
@@ -107,7 +131,10 @@ class SessionTradingStateMachine:
         self.min_wick_ratio = min_wick_ratio
         self.risk_reward_ratio = risk_reward_ratio
         self.atr_multiplier = atr_multiplier
+        self.max_spread = max_spread
 
+        self.shadow_mode = shadow_mode
+        self.live_execution_enabled: bool = False
         self.current_state: SessionStrategyState = SessionStrategyState.WAITING_FOR_SESSION
         self.current_trade_date: Optional[str] = None
         self.ref_high: Optional[float] = None
@@ -115,8 +142,10 @@ class SessionTradingStateMachine:
         self.active_setup: Optional[ActiveSetupContext] = None
         self.last_transition_reason: str = "Initialized"
         self.last_candle_id: str = ""
+        self.processed_candles_count: int = 0
 
         self._init_db()
+        self._restore_state_from_db()
 
     def _init_db(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,7 +170,85 @@ class SessionTradingStateMachine:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS state_machine_processed_candles (
+                    candle_id TEXT PRIMARY KEY,
+                    processed_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS shadow_proposals (
+                    proposal_id TEXT PRIMARY KEY,
+                    candle_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    setup_name TEXT NOT NULL,
+                    target_level TEXT NOT NULL,
+                    target_price REAL NOT NULL,
+                    entry_price REAL NOT NULL,
+                    sl_price REAL NOT NULL,
+                    tp_price REAL NOT NULL,
+                    risk_r REAL NOT NULL,
+                    spread REAL,
+                    status TEXT NOT NULL,
+                    rejection_reason TEXT NOT NULL
+                )
+                """
+            )
             conn.commit()
+
+    def _restore_state_from_db(self) -> None:
+        """Restores the latest valid state from SQLite if available."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                last_row = conn.execute(
+                    """
+                    SELECT to_state, trade_date, ref_high, ref_low,
+                           transition_reason, candle_id
+                    FROM strategy_state_transitions
+                    ORDER BY transition_id DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+                if last_row:
+                    try:
+                        self.current_state = SessionStrategyState(last_row["to_state"])
+                        self.current_trade_date = last_row["trade_date"]
+                        self.ref_high = last_row["ref_high"]
+                        self.ref_low = last_row["ref_low"]
+                        self.last_transition_reason = last_row["transition_reason"]
+                        self.last_candle_id = last_row["candle_id"]
+                    except ValueError:
+                        pass
+                cnt = conn.execute(
+                    "SELECT COUNT(*) FROM state_machine_processed_candles"
+                ).fetchone()[0]
+                self.processed_candles_count = cnt
+        except Exception:
+            pass
+
+    def is_candle_processed(self, candle_id: str) -> bool:
+        """Checks if a candle was already processed."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM state_machine_processed_candles WHERE candle_id = ?",
+                (candle_id,),
+            ).fetchone()
+            return row is not None
+
+    def mark_candle_processed(self, candle_id: str) -> None:
+        """Marks a candle as processed in SQLite."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO state_machine_processed_candles (candle_id, processed_at) VALUES (?, ?)",
+                (candle_id, datetime.now(TZ_UTC).isoformat()),
+            )
+            conn.commit()
+        self.processed_candles_count += 1
 
     def _log_transition(
         self,
@@ -205,6 +312,8 @@ class SessionTradingStateMachine:
         self.current_state = to_state
         self.last_transition_reason = reason
         self.last_candle_id = candle.timestamp.isoformat()
+        if self.active_setup:
+            self.active_setup.bars_in_state = 0
 
     def process_candle(
         self,
@@ -331,7 +440,22 @@ class SessionTradingStateMachine:
                 self.current_state = SessionStrategyState.RANGE_FINALIZED
                 return None
 
+            self.active_setup.bars_in_state += 1
             level = self.active_setup.target_level_val
+
+            # Invalidation Timeout: 8 bars without reclaim
+            if self.active_setup.bars_in_state >= 8:
+                self._log_transition(
+                    SessionStrategyState.CLOSED,
+                    candle,
+                    primary_session,
+                    "ابطال ستاپ: گذشت بیش از ۸ کندل بدون تأیید بازپس‌گیری سطح (Reclaim Timeout)",
+                    {},
+                    {"timeout_bars": self.active_setup.bars_in_state},
+                )
+                self.active_setup = None
+                return None
+
             if self.active_setup.direction == SignalDirection.BUY:
                 if candle.close > level:
                     self.active_setup.reclaim_candle_time = candle.timestamp.isoformat()
@@ -354,6 +478,7 @@ class SessionTradingStateMachine:
                         {},
                         {"excessive_drop": candle.low},
                     )
+                    self.active_setup = None
             else:  # SELL
                 if candle.close < level:
                     self.active_setup.reclaim_candle_time = candle.timestamp.isoformat()
@@ -376,6 +501,7 @@ class SessionTradingStateMachine:
                         {},
                         {"excessive_rise": candle.high},
                     )
+                    self.active_setup = None
             return None
 
         # State 5: RECLAIM_CONFIRMED
@@ -384,8 +510,22 @@ class SessionTradingStateMachine:
                 self.current_state = SessionStrategyState.RANGE_FINALIZED
                 return None
 
+            self.active_setup.bars_in_state += 1
+
+            # Invalidation Timeout: 8 bars without BOS
+            if self.active_setup.bars_in_state >= 8:
+                self._log_transition(
+                    SessionStrategyState.CLOSED,
+                    candle,
+                    primary_session,
+                    "ابطال ستاپ: عدم شکست ساختار در ۸ کندل پس از بازپس‌گیری (BOS Timeout)",
+                    {},
+                    {"timeout_bars": self.active_setup.bars_in_state},
+                )
+                self.active_setup = None
+                return None
+
             if self.active_setup.direction == SignalDirection.BUY:
-                # BOS occurs when candle closes above reclaim candle high
                 if candle.close > self.active_setup.reclaim_candle_high:
                     self.active_setup.bos_candle_time = candle.timestamp.isoformat()
                     self._log_transition(
@@ -415,9 +555,23 @@ class SessionTradingStateMachine:
                 self.current_state = SessionStrategyState.RANGE_FINALIZED
                 return None
 
+            self.active_setup.bars_in_state += 1
+
+            # Invalidation Timeout: 12 bars without retest
+            if self.active_setup.bars_in_state >= 12:
+                self._log_transition(
+                    SessionStrategyState.CLOSED,
+                    candle,
+                    primary_session,
+                    "ابطال ستاپ: عدم پولبک و ریجکشن شدو در ۱۲ کندل پس از شکست ساختار (Retest Timeout)",
+                    {},
+                    {"timeout_bars": self.active_setup.bars_in_state},
+                )
+                self.active_setup = None
+                return None
+
             level = self.active_setup.target_level_val
             if self.active_setup.direction == SignalDirection.BUY:
-                # Retest within tolerance + Wick rejection
                 retested = (
                     candle.low <= level + self.retest_tolerance
                     and candle.close > level
@@ -528,7 +682,18 @@ class SessionTradingStateMachine:
 
         # State 8: ENTRY_ELIGIBLE -> Waiting for order placement
         elif self.current_state == SessionStrategyState.ENTRY_ELIGIBLE:
-            # If candle violates SL or moves away before fill
+            if self.active_setup:
+                self.active_setup.bars_in_state += 1
+                if self.active_setup.bars_in_state >= 3:
+                    self._log_transition(
+                        SessionStrategyState.CLOSED,
+                        candle,
+                        primary_session,
+                        "پایان پنجره مجاز ورود سیگنال (Entry Window Expired)",
+                        {},
+                        {"expired_bars": self.active_setup.bars_in_state},
+                    )
+                    self.active_setup = None
             return None
 
         # State 9: PAPER_ORDER -> Dispatched
@@ -544,6 +709,111 @@ class SessionTradingStateMachine:
             return None
 
         return None
+
+    def process_completed_5m_candles(
+        self,
+        candles: List[Candle],
+        live_quote: Optional[MarketQuote] = None,
+        calendar: Optional[MacroNewsCalendar] = None,
+    ) -> List[SetupSignal]:
+        """
+        Feeds a batch of completed 5m candles sequentially and causally.
+        Deduplicates each candle in SQLite to ensure exact-once processing.
+        In Shadow Mode: evaluates filtering rules and records shadow proposals.
+        """
+        if not candles:
+            return []
+
+        stats_series = self.session_mgr.calculate_as_of_session_stats_series(candles)
+        signals: List[SetupSignal] = []
+
+        for i, candle in enumerate(candles):
+            cid = candle.timestamp.isoformat()
+            if self.is_candle_processed(cid):
+                continue
+
+            stat_i = stats_series[i] if i < len(stats_series) else None
+            sig = self.process_candle(candle, candles[:i], session_stats=stat_i)
+
+            if sig:
+                signals.append(sig)
+                self._record_shadow_proposal(sig, candle, live_quote, calendar)
+
+            self.mark_candle_processed(cid)
+
+        return signals
+
+    def _record_shadow_proposal(
+        self,
+        sig: SetupSignal,
+        candle: Candle,
+        live_quote: Optional[MarketQuote],
+        calendar: Optional[MacroNewsCalendar],
+    ) -> None:
+        """Evaluates filters and stores a shadow entry proposal in SQLite."""
+        pid = f"PROP_{candle.timestamp.strftime('%Y%m%d_%H%M%S')}_{sig.direction.value}"
+        spread = live_quote.spread if live_quote else 0.30
+
+        # Evaluate risk/filtering conditions
+        status = "ELIGIBLE_SHADOW"
+        reason = "واجد شرایط کامل در حالت سایه (Shadow Mode - بدون سفارش زنده)"
+
+        if spread > 0.50:
+            status = "REJECTED_SPREAD"
+            reason = f"اسپرد جاری ({spread:.2f}$) بالاتر از سقف مجاز ($0.50) است."
+        elif calendar:
+            is_blackout, news_reason = calendar.is_blackout(candle.timestamp)
+            if is_blackout:
+                status = "REJECTED_NEWS"
+                reason = f"توقف به دلیل انتشار خبر اقتصادی حساس ({news_reason})"
+        elif sig.risk_r <= 0 or (abs(sig.tp_price - sig.entry_price) / sig.risk_r) < self.risk_reward_ratio:
+            status = "REJECTED_RISK"
+            reason = f"نسبت ریوارد به ریسک کمتر از سقف مجاز ({self.risk_reward_ratio}R) است."
+
+        prop = ShadowProposal(
+            proposal_id=pid,
+            candle_id=candle.timestamp.isoformat(),
+            timestamp=candle.timestamp.isoformat(),
+            direction=sig.direction.value,
+            setup_name=sig.setup_name,
+            target_level=sig.metrics.get("level", ""),
+            target_price=sig.metrics.get("level_val", 0.0),
+            entry_price=sig.entry_price,
+            sl_price=sig.sl_price,
+            tp_price=sig.tp_price,
+            risk_r=sig.risk_r,
+            spread=spread,
+            status=status,
+            rejection_reason=reason,
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO shadow_proposals (
+                    proposal_id, candle_id, timestamp, direction, setup_name,
+                    target_level, target_price, entry_price, sl_price, tp_price,
+                    risk_r, spread, status, rejection_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    prop.proposal_id,
+                    prop.candle_id,
+                    prop.timestamp,
+                    prop.direction,
+                    prop.setup_name,
+                    prop.target_level,
+                    prop.target_price,
+                    prop.entry_price,
+                    prop.sl_price,
+                    prop.tp_price,
+                    prop.risk_r,
+                    prop.spread,
+                    prop.status,
+                    prop.rejection_reason,
+                ),
+            )
+            conn.commit()
 
     def on_order_dispatched(self, order_id: str, candle: Candle) -> None:
         """Transitions state machine to PAPER_ORDER."""
@@ -587,6 +857,7 @@ class SessionTradingStateMachine:
             {"close_reason": close_reason},
             {},
         )
+        self.active_setup = None
 
     def get_state_summary(self) -> Dict[str, Any]:
         """Returns snapshot of current state machine context for UI/API."""
@@ -604,10 +875,37 @@ class SessionTradingStateMachine:
                 """
             ).fetchall()
 
+            prop_rows = conn.execute(
+                """
+                SELECT proposal_id, candle_id, timestamp, direction, setup_name,
+                       target_level, target_price, entry_price, sl_price, tp_price,
+                       risk_r, spread, status, rejection_reason
+                FROM shadow_proposals
+                ORDER BY timestamp DESC
+                LIMIT 10
+                """
+            ).fetchall()
+
+            processed_count = conn.execute(
+                "SELECT COUNT(*) FROM state_machine_processed_candles"
+            ).fetchone()[0]
+
         history = [dict(r) for r in rows]
+        proposals = [dict(p) for p in prop_rows]
+
+        # Explicit truth: If not yet fed any closed candle, mark NOT_WIRED_TO_LIVE_CANDLE_LOOP.
+        # Once candles are fed, report SHADOW_MODE.
+        runtime_status = (
+            "SHADOW_MODE"
+            if processed_count > 0 or self.processed_candles_count > 0
+            else "NOT_WIRED_TO_LIVE_CANDLE_LOOP"
+        )
 
         return {
             "current_state": self.current_state.value,
+            "runtime_status": runtime_status,
+            "shadow_mode": self.shadow_mode,
+            "enabled_for_auto_trading": self.live_execution_enabled,
             "trade_date": self.current_trade_date,
             "ref_high": self.ref_high,
             "ref_low": self.ref_low,
@@ -615,5 +913,24 @@ class SessionTradingStateMachine:
             "last_candle_id": self.last_candle_id,
             "strategy_version": self.strategy_version,
             "active_setup": asdict(self.active_setup) if self.active_setup else None,
+            "processed_candles_count": processed_count,
             "recent_transitions": history,
+            "recent_proposals": proposals,
         }
+
+    def get_shadow_proposals(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Returns recent shadow proposals from SQLite."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT proposal_id, candle_id, timestamp, direction, setup_name,
+                       target_level, target_price, entry_price, sl_price, tp_price,
+                       risk_r, spread, status, rejection_reason
+                FROM shadow_proposals
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]

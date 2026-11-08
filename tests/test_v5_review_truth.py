@@ -1,5 +1,6 @@
 """The new V5 dashboard must not falsely claim that an AI agent is live."""
 from fastapi.testclient import TestClient
+
 from app import app
 
 client = TestClient(app)

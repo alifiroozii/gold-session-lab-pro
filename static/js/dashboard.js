@@ -1338,6 +1338,80 @@ async function fetchResearchData() {
             }
         }
     } catch (e) {}
+
+    // 8. Shadow Mode Proposals
+    try {
+        const resShadow = await fetch("/api/strategy/shadow-proposals");
+        if (resShadow.ok) {
+            const proposals = await resShadow.json();
+            const tbody = document.querySelector("#shadowProposalsTable tbody");
+            if (tbody && proposals.length > 0) {
+                tbody.innerHTML = proposals.map(p => {
+                    const isEligible = p.status.includes("ELIGIBLE");
+                    const statusClass = isEligible ? "badge-pd" : "badge-risk-medium";
+                    const statusText = isEligible ? "واجد شرایط (سایه)" : (
+                        p.status === "REJECTED_SPREAD" ? "رد اسپرد" :
+                        p.status === "REJECTED_NEWS" ? "رد رویداد کلان" :
+                        p.status === "REJECTED_RISK" ? "رد ریسک / نسبت R" : p.status
+                    );
+                    const dirText = p.direction === "BUY" ? "خرید" : "فروش";
+                    const dirClass = p.direction === "BUY" ? "text-green" : "text-red";
+                    const spreadText = p.spread != null ? `$${p.spread.toFixed(2)}` : "—";
+                    return `
+                        <tr>
+                            <td><code>${safeText(p.proposal_id)}</code></td>
+                            <td>${toShamsiDateTime(p.timestamp)}</td>
+                            <td><strong>${safeText(p.setup_name)}</strong></td>
+                            <td class="${dirClass}"><strong>${dirText}</strong></td>
+                            <td>${safeText(p.target_level)} (${formatGoldPrice(p.target_price)})</td>
+                            <td><strong>${formatGoldPrice(p.entry_price)}</strong></td>
+                            <td>${formatGoldPrice(p.sl_price)} / ${formatGoldPrice(p.tp_price)}</td>
+                            <td>${spreadText}</td>
+                            <td><span class="badge ${statusClass}">${statusText}</span></td>
+                            <td>${safeText(p.rejection_reason)}</td>
+                        </tr>
+                    `;
+                }).join("");
+            } else if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">هنوز پیشنهادی در حالت سایه ارزیابی نشده است. با بارگذاری کندل‌ها ارزیابی برخط آغاز می‌شود.</td></tr>';
+            }
+        }
+    } catch (_e) {}
+
+    // 9. Strategy Validation Report (OOS Walk-Forward)
+    try {
+        const resVal = await fetch("/api/strategy/validation-report");
+        if (resVal.ok) {
+            const rep = await resVal.json();
+            const verdictEl = document.getElementById("valVerdict");
+            const provEl = document.getElementById("valProvenance");
+            const wrEl = document.getElementById("valWinRate");
+            const pfEl = document.getElementById("valProfitFactor");
+            const expEl = document.getElementById("valExpectancy");
+            const paEl = document.getElementById("valPaperAuto");
+            const sumEl = document.getElementById("valSummaryDesc");
+
+            if (verdictEl) {
+                verdictEl.textContent = rep.statistical_verdict || rep.outcome || "در انتظار ارزیابی";
+                verdictEl.className = rep.statistical_verdict === "FAIL" ? "text-red" : "text-blue";
+            }
+            if (provEl) {
+                provEl.textContent = rep.data_provenance_verified ? "تأییدشده (لایسنس OANDA)" : "تأییدنشده (فیکسچر دمو)";
+                provEl.className = rep.data_provenance_verified ? "text-green" : "text-red";
+            }
+            const oos = rep.out_of_sample_metrics || {};
+            if (wrEl) wrEl.textContent = oos.win_rate_pct != null ? `${oos.win_rate_pct}%` : "—";
+            if (pfEl) pfEl.textContent = oos.profit_factor != null ? `${oos.profit_factor}` : "—";
+            if (expEl) expEl.textContent = oos.expectancy_r != null ? `${oos.expectancy_r} R` : "—";
+            if (paEl) {
+                paEl.textContent = rep.authorizes_paper_auto ? "مجاز" : "غیرمجاز ❌";
+                paEl.className = rep.authorizes_paper_auto ? "badge-pd" : "badge-risk-high";
+            }
+            if (sumEl) {
+                sumEl.textContent = rep.persian_summary || rep.limitations || "گزارش اعتبارسنجی بارگذاری شد.";
+            }
+        }
+    } catch (_e) {}
 }
 
 // Verified Antigravity activity. No fabricated success messages.
@@ -1570,42 +1644,37 @@ async function fetchStrategyState() {
         const res = await fetch("/api/strategy/state", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
-        if (data.runtime_status === "NOT_WIRED_TO_LIVE_CANDLE_LOOP") {
-            if (badgeEl) {
-                badgeEl.textContent = "موتور سشن هنوز به پردازش زنده متصل نیست";
-                badgeEl.title = "ماژول تحقیقاتی وجود دارد، اما به حلقه اجرای کندل و ربات وصل نشده.";
-            }
-            if (lastSigEl) {
-                lastSigEl.textContent = "سیگنال اجرایی تأیید نشده";
-                lastSigEl.className = "text-muted";
-            }
-            return;
-        }
-        if (badgeEl && data.current_state) {
-            const stateNames = {
-                "WAITING_FOR_SESSION": "در انتظار سشن",
-                "BUILDING_RANGE": "تشکیل محدوده آسیا",
-                "RANGE_FINALIZED": "سطوح آسیا تثبیت شد",
-                "SWEEP_DETECTED": "نفوذ نقدینگی (Sweep)",
-                "RECLAIM_CONFIRMED": "تأیید بازپس‌گیری (Reclaim)",
-                "STRUCTURE_CONFIRMED": "شکست ساختار (BOS)",
-                "RETEST_CONFIRMED": "تأیید پولبک (Retest)",
-                "ENTRY_ELIGIBLE": "واجد شرایط ورود",
-                "PAPER_ORDER": "سفارش ارسال شد",
-                "POSITION_MANAGEMENT": "مدیریت موقعیت باز",
-                "CLOSED": "پایان چرخه ستاپ"
-            };
-            badgeEl.textContent = stateNames[data.current_state] || data.current_state;
-            badgeEl.title = data.last_reason || "";
+        const stateNames = {
+            "WAITING_FOR_SESSION": "در انتظار سشن",
+            "BUILDING_RANGE": "تشکیل محدوده آسیا",
+            "RANGE_FINALIZED": "سطوح آسیا تثبیت شد",
+            "SWEEP_DETECTED": "نفوذ نقدینگی (Sweep)",
+            "RECLAIM_CONFIRMED": "تأیید بازپس‌گیری (Reclaim)",
+            "STRUCTURE_CONFIRMED": "شکست ساختار (BOS)",
+            "RETEST_CONFIRMED": "تأیید پولبک (Retest)",
+            "ENTRY_ELIGIBLE": "واجد شرایط ورود (سایه)",
+            "PAPER_ORDER": "سفارش ارسال شد",
+            "POSITION_MANAGEMENT": "مدیریت موقعیت باز",
+            "CLOSED": "پایان چرخه ستاپ"
+        };
+        const stateText = stateNames[data.current_state] || data.current_state || "در انتظار سشن";
+        if (badgeEl) {
+            badgeEl.textContent = `[سایه] ${stateText}`;
+            badgeEl.title = `حالت سایه فعال (کندل‌های پردازش شده: ${data.processed_candles_count || 0}). اجرای زنده غیرفعال است.`;
         }
         if (lastSigEl) {
             if (data.active_setup) {
                 const s = data.active_setup;
                 const dir = s.direction === "BUY" ? "خرید" : "فروش";
-                lastSigEl.innerHTML = `<strong>${dir}</strong> روی ${safeText(s.target_level_name)} (${formatGoldPrice(s.target_level_val)})`;
+                lastSigEl.innerHTML = `<strong>${dir}</strong> روی ${safeText(s.target_level_name || '')} (${formatGoldPrice(s.target_level_val || 0)})`;
                 lastSigEl.className = s.direction === "BUY" ? "text-green" : "text-red";
+            } else if (data.recent_proposals && data.recent_proposals.length > 0) {
+                const p = data.recent_proposals[0];
+                const dir = p.direction === "BUY" ? "خرید" : "فروش";
+                lastSigEl.innerHTML = `<span class="badge ${p.status.includes('ELIGIBLE') ? 'badge-pd' : 'badge-asia'}">${dir} ${safeText(p.setup_name)}</span>`;
+                lastSigEl.className = p.status.includes('ELIGIBLE') ? 'text-green' : 'text-muted';
             } else {
-                lastSigEl.textContent = "بدون ستاپ فعال";
+                lastSigEl.textContent = "در انتظار ستاپ سشن";
                 lastSigEl.className = "text-muted";
             }
         }

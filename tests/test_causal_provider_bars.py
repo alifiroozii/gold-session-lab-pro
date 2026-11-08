@@ -3,8 +3,8 @@
 These tests verify software timing only; they are not evidence of a profitable
 trading strategy or approval to activate PAPER_AUTO.
 """
-from datetime import datetime, timedelta, timezone
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,7 @@ import pytest
 from goldlab.bot import AutomatedPaperBot, BotState
 from goldlab.data import DataPipeline
 from goldlab.paper_broker import PaperBroker
-from goldlab.sessions import SessionManager, TZ_NEW_YORK
+from goldlab.sessions import TZ_NEW_YORK, SessionManager
 from goldlab.types import Candle
 
 UTC = timezone.utc
