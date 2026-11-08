@@ -106,17 +106,21 @@ class AutomatedPaperBot:
         self.log_event("STATE_CHANGE", f"وضعیت ربات از {old_state.value} به {new_state.value} تغییر یافت.")
 
     def on_candle_close(
-        self, closed_candles: List[Candle], current_bid: float, current_ask: float
+        self,
+        closed_candles: List[Candle],
+        current_bid: float,
+        current_ask: float,
+        current_time: Optional[datetime] = None,
     ) -> List[SetupSignal]:
-        """
-        Triggered when a candle closes.
+        """Triggered when a candle closes.
+
         1. Checks feed status and heartbeat
         2. Evaluates risk thresholds (daily loss limit, max open positions)
         3. Checks economic news blackout
         4. Runs research engine strategy pipeline
         5. If in PAPER_AUTO mode, sizes lots and dispatches paper orders
         """
-        self.heartbeat_time = datetime.now(TZ_UTC)
+        self.heartbeat_time = current_time or datetime.now(TZ_UTC)
         self.last_evaluation_time = self.heartbeat_time
 
         if not closed_candles:
@@ -125,7 +129,9 @@ class AutomatedPaperBot:
         last_candle = closed_candles[-1]
 
         # 1. Feed Health Check
-        feed_health = self.engine.data_pipeline.diagnostics.check_feed_status(closed_candles)
+        feed_health = self.engine.data_pipeline.diagnostics.check_feed_status(
+            closed_candles, current_time=self.heartbeat_time
+        )
         if feed_health["status"] in ["FEED_STALE", "MARKET_CLOSED", "OFFLINE_EMPTY"]:
             if self.state == BotState.PAPER_AUTO:
                 self.set_state(BotState.DATA_DISCONNECTED)
@@ -164,7 +170,7 @@ class AutomatedPaperBot:
 
         # 4. Run Analysis Pipeline
         self.engine.load_candles(closed_candles, timeframe=self.engine.current_timeframe)
-        self.engine.run_pipeline()
+        self.engine.run_pipeline(allow_pending=True)
 
         new_signals = [s for s in self.engine.signals if s.signal_index == len(self.engine.current_candles) - 1]
 

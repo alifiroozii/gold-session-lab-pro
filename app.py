@@ -11,13 +11,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from decimal import Decimal
 from datetime import datetime, timezone
-
-import httpx
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +34,12 @@ from goldlab.diagnostics import DiagnosticsEngine
 from goldlab.engine import ResearchEngine
 from goldlab.guardian import IndependentRiskGuardian
 from goldlab.learning import MistakeAnalyzerAndHypothesisRegistry
-from goldlab.market_safety import MarketQuote, OandaReadOnlyFeed, execution_gate
+from goldlab.market_safety import (
+    InstrumentSpecification,
+    MarketQuote,
+    OandaReadOnlyFeed,
+    execution_gate,
+)
 from goldlab.ml_model import MLTradeQualityModel
 from goldlab.paper_broker import OrderDirection, OrderStatus, OrderType, PaperBroker
 from goldlab.promotion import ChampionChallengerManager
@@ -360,6 +364,7 @@ async def shutdown_event() -> None:
 
 def get_execution_status() -> Dict[str, Any]:
     allowed, reason = execution_gate(verified_quote)
+    spec = InstrumentSpecification()
     return {
         "market_open": allowed,
         "paper_orders_allowed": allowed,
@@ -369,17 +374,36 @@ def get_execution_status() -> Dict[str, Any]:
         "quote_time": verified_quote.timestamp.isoformat() if verified_quote else None,
         "bid": verified_quote.bid if verified_quote else None,
         "ask": verified_quote.ask if verified_quote else None,
-        "bid_display": verified_quote.bid_display if verified_quote else None,
-        "ask_display": verified_quote.ask_display if verified_quote else None,
+        "bid_display": getattr(verified_quote, "bid_display", None) if verified_quote else None,
+        "ask_display": getattr(verified_quote, "ask_display", None) if verified_quote else None,
+        "mid": verified_quote.mid if verified_quote else None,
+        "spread": verified_quote.spread if verified_quote else None,
         "spread_display": (
             format(Decimal(verified_quote.ask_display)
                    - Decimal(verified_quote.bid_display), "f")
-            if verified_quote and verified_quote.bid_display
-            and verified_quote.ask_display else None
+            if verified_quote and getattr(verified_quote, "bid_display", None)
+            and getattr(verified_quote, "ask_display", None) else None
         ),
+        "last_update": verified_quote.timestamp.isoformat() if verified_quote else None,
+        "data_provider": verified_quote.source if verified_quote else "NONE",
+        "market_status": "OPEN" if allowed else ("DISCONNECTED" if not verified_quote else reason),
         "chart_source": engine.market_data_source,
         "provider_configured": market_feed.configured,
         "historical_data_is_executable": False,
+        "instrument_spec": {
+            "symbol": spec.instrument,
+            "display_name": spec.display_name,
+            "display_precision": spec.display_precision,
+            "pip_location": spec.pip_location,
+            "tick_size": float(spec.tick_size),
+            "contract_size": float(spec.contract_size),
+            "max_spread": float(spec.max_spread),
+        },
+        "provider_notes": (
+            "تفاوت TradingView و OANDA: کتابخانه TradingView Lightweight Charts صرفاً یک ابزار بصری‌ساز چارت در مرورگر است و فید مستقیم ارسال سفارش یا کوت قیمت زنده ارائه نمی‌دهد. "
+            "داده‌های OANDA از طریق API v20 به عنوان ارائه‌دهنده قیمت‌های لحظه‌ای CFD با اسپرد متغیر دریافت می‌شوند. "
+            "قیمت‌های اسپات طلا (TVC/IDC)، فیوچرز (CME GC) و مظنه‌های بروکرها تفاوت طبیعی اسپرد و مبنا دارند و نباید به صورت ساختگی هم‌ارز شوند."
+        ),
     }
 
 

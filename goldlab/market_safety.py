@@ -10,6 +10,7 @@ import math
 import os
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
+from decimal import Decimal
 from typing import Any, Dict, Optional, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -17,6 +18,19 @@ from zoneinfo import ZoneInfo
 
 UTC = timezone.utc
 NEW_YORK = ZoneInfo("America/New_York")
+
+
+@dataclass(frozen=True)
+class InstrumentSpecification:
+    instrument: str = "XAU_USD"
+    display_name: str = "Gold (Spot CFD)"
+    display_precision: int = 2
+    pip_location: int = -2
+    tick_size: Decimal = Decimal("0.01")
+    contract_size: Decimal = Decimal("100.0")
+    min_trade_size: Decimal = Decimal("0.01")
+    max_trade_size: Decimal = Decimal("5.00")
+    max_spread: Decimal = Decimal("2.50")
 
 
 @dataclass(frozen=True)
@@ -29,6 +43,26 @@ class MarketQuote:
     tradeable: bool = False
     bid_display: str = ""
     ask_display: str = ""
+
+    @property
+    def mid(self) -> float:
+        return round((self.bid + self.ask) / 2.0, 4)
+
+    @property
+    def spread(self) -> float:
+        return round(self.ask - self.bid, 4)
+
+    @property
+    def bid_decimal(self) -> Decimal:
+        return Decimal(str(self.bid))
+
+    @property
+    def ask_decimal(self) -> Decimal:
+        return Decimal(str(self.ask))
+
+    @property
+    def spread_decimal(self) -> Decimal:
+        return self.ask_decimal - self.bid_decimal
 
 
 def execution_gate(quote: Optional[MarketQuote], now: Optional[datetime] = None,
@@ -49,6 +83,8 @@ def execution_gate(quote: Optional[MarketQuote], now: Optional[datetime] = None,
         return False, "INVALID_QUOTE"
     if quote.bid <= 0 or quote.ask <= quote.bid:
         return False, "INVALID_BID_ASK"
+    if quote.spread > 2.50:
+        return False, "SPREAD_EXCEEDS_MAXIMUM"
     age = (now - quote.timestamp).total_seconds()
     if age < -5 or age > max_age_seconds:
         return False, "QUOTE_STALE_OR_FUTURE"

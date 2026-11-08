@@ -112,11 +112,116 @@ class SessionManager:
 
         return active
 
+    def get_trading_day(self, dt_utc: datetime) -> str:
+        """Determines the Forex/Gold trading day in New York time.
+
+        Daily rollover is at 18:00 NY time (starts the next trading day).
+        Sunday 18:00 NY rollover is Monday's trading day.
+        """
+        if dt_utc.tzinfo is None:
+            dt_utc = dt_utc.replace(tzinfo=TZ_UTC)
+        ny = dt_utc.astimezone(TZ_NEW_YORK)
+        if ny.time() >= time(18, 0):
+            d = ny.date() + timedelta(days=1)
+            if d.weekday() == 5:
+                d += timedelta(days=2)
+            elif d.weekday() == 6:
+                d += timedelta(days=1)
+            return d.isoformat()
+        return ny.date().isoformat()
+
+    def calculate_as_of_session_stats_series(
+        self, candles: List[Candle]
+    ) -> List[Dict[str, Dict[str, Optional[float]]]]:
+        """Calculates point-in-time session levels for each candle in sequence.
+
+        Guarantees zero lookahead: for candle i, only candles 0..i are used.
+        """
+        if not candles:
+            return []
+
+        series: List[Dict[str, Dict[str, Optional[float]]]] = []
+        n = len(candles)
+
+        # Precompute trading day and session membership for each candle
+        candle_meta = []
+        for c in candles:
+            tday = self.get_trading_day(c.timestamp)
+            sess = set(self.get_candle_sessions(c.timestamp))
+            candle_meta.append((tday, sess))
+
+        days_seen: List[str] = []
+        day_candle_indices: Dict[str, List[int]] = {}
+
+        for i in range(n):
+            c = candles[i]
+            tday, _ = candle_meta[i]
+
+            if not days_seen or days_seen[-1] != tday:
+                days_seen.append(tday)
+                day_candle_indices[tday] = []
+            day_candle_indices[tday].append(i)
+
+            # Previous completed trading day high/low
+            pd_high: Optional[float] = None
+            pd_low: Optional[float] = None
+            if len(days_seen) > 1:
+                prev_tday = days_seen[-2]
+                prev_indices = day_candle_indices[prev_tday]
+                if prev_indices:
+                    pd_high = round(max(candles[k].high for k in prev_indices), 4)
+                    pd_low = round(min(candles[k].low for k in prev_indices), 4)
+
+            # Current trading day sessions up to bar i
+            curr_indices = day_candle_indices[tday]
+
+            asia_bars = [
+                candles[k]
+                for k in curr_indices
+                if SessionName.ASIA_REFERENCE in candle_meta[k][1]
+                or SessionName.TOKYO in candle_meta[k][1]
+            ]
+            london_bars = [
+                candles[k]
+                for k in curr_indices
+                if SessionName.LONDON in candle_meta[k][1]
+            ]
+            ny_bars = [
+                candles[k]
+                for k in curr_indices
+                if SessionName.NEW_YORK in candle_meta[k][1]
+            ]
+
+            def _fmt_hl(bars: List[Candle]) -> Dict[str, Optional[float]]:
+                if not bars:
+                    return {"high": None, "low": None, "midline": None}
+                h = round(max(b.high for b in bars), 4)
+                low_val = round(min(b.low for b in bars), 4)
+                return {"high": h, "low": low_val, "midline": round((h + low_val) / 2.0, 4)}
+
+            stats_i: Dict[str, Dict[str, Optional[float]]] = {
+                "asia": _fmt_hl(asia_bars),
+                "london": _fmt_hl(london_bars),
+                "ny": _fmt_hl(ny_bars),
+                "pd": {
+                    "high": pd_high,
+                    "low": pd_low,
+                    "midline": round((pd_high + pd_low) / 2.0, 4)
+                    if pd_high is not None and pd_low is not None
+                    else None,
+                },
+                "pw": {"high": None, "low": None, "midline": None},
+            }
+            series.append(stats_i)
+
+        return series
+
     def calculate_session_stats(
         self, candles: List[Candle]
     ) -> Dict[str, Dict[str, Optional[float]]]:
-        """
-        Calculates PDH/PDL, Asia H/L, London H/L, NY H/L and midline from candle history.
+        """Calculates PDH/PDL, Asia H/L, London H/L, NY H/L and midline from candle history.
+
+        Uses as-of calculation on the latest candle to prevent lookahead leakage.
         """
         stats: Dict[str, Dict[str, Optional[float]]] = {
             "asia": {"high": None, "low": None, "midline": None},
@@ -129,58 +234,8 @@ class SessionManager:
         if not candles:
             return stats
 
-        # Find today's date in NY timezone
-        last_dt = candles[-1].timestamp.astimezone(TZ_NEW_YORK)
-        today_ny = last_dt.date()
-        yesterday_ny = today_ny - timedelta(days=1)
-        prev_week = last_dt.isocalendar().week - 1
-
-        asia_high, asia_low = -float("inf"), float("inf")
-        london_high, london_low = -float("inf"), float("inf")
-        ny_high, ny_low = -float("inf"), float("inf")
-        pd_high, pd_low = -float("inf"), float("inf")
-        pw_high, pw_low = -float("inf"), float("inf")
-
-        for c in candles:
-            c_ny = c.timestamp.astimezone(TZ_NEW_YORK)
-            c_date = c_ny.date()
-            c_week = c_ny.isocalendar().week
-            sessions = self.get_candle_sessions(c.timestamp)
-
-            # Previous Day High / Low
-            if c_date == yesterday_ny:
-                pd_high = max(pd_high, c.high)
-                pd_low = min(pd_low, c.low)
-
-            # Previous Week High / Low
-            if c_week == prev_week:
-                pw_high = max(pw_high, c.high)
-                pw_low = min(pw_low, c.low)
-
-            # Today's session levels
-            if c_date == today_ny:
-                if SessionName.ASIA_REFERENCE in sessions:
-                    asia_high = max(asia_high, c.high)
-                    asia_low = min(asia_low, c.low)
-                if SessionName.LONDON in sessions:
-                    london_high = max(london_high, c.high)
-                    london_low = min(london_low, c.low)
-                if SessionName.NEW_YORK in sessions:
-                    ny_high = max(ny_high, c.high)
-                    ny_low = min(ny_low, c.low)
-
-        def _format_hl(h: float, low_val: float) -> Dict[str, Optional[float]]:
-            if h == -float("inf") or low_val == float("inf"):
-                return {"high": None, "low": None, "midline": None}
-            return {"high": round(h, 4), "low": round(low_val, 4), "midline": round((h + low_val) / 2.0, 4)}
-
-        stats["asia"] = _format_hl(asia_high, asia_low)
-        stats["london"] = _format_hl(london_high, london_low)
-        stats["ny"] = _format_hl(ny_high, ny_low)
-        stats["pd"] = _format_hl(pd_high, pd_low)
-        stats["pw"] = _format_hl(pw_high, pw_low)
-
-        return stats
+        series = self.calculate_as_of_session_stats_series(candles)
+        return series[-1] if series else stats
 
     def calculate_session_boxes(self, candles: List[Candle], days: int = 4) -> List[Dict[str, object]]:
         """Time-bounded Asia/London/New York + overlap rectangles, including prior days.

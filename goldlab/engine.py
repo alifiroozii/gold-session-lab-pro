@@ -48,6 +48,7 @@ class ResearchEngine:
         self.current_candles: List[Candle] = []
         self.current_timeframe: str = "5m"
         self.session_stats: Dict[str, Any] = {}
+        self.session_stats_series: List[Dict[str, Any]] = []
         self.swings: List[SwingPoint] = []
         self.fvgs: List[FairValueGap] = []
         self.obs: List[OrderBlockProxy] = []
@@ -69,7 +70,7 @@ class ResearchEngine:
         self.data_pipeline.save_to_sqlite(raw_1m, source_label=csv_path.name)
         self.load_candles(raw_1m, timeframe=timeframe)
 
-    def run_pipeline(self) -> BacktestSummary:
+    def run_pipeline(self, allow_pending: bool = False) -> BacktestSummary:
         """
         Executes end-to-end analytical workflow across current timeframe candles:
         1. Candle metric enrichment (ATR14, wicks, displacement)
@@ -87,6 +88,7 @@ class ResearchEngine:
 
         # 2. Calculate Session levels
         self.session_stats = self.session_mgr.calculate_session_stats(self.current_candles)
+        self.session_stats_series = self.session_mgr.calculate_as_of_session_stats_series(self.current_candles)
 
         # 3. Market structure
         self.swings = self.structure.find_swing_points(self.current_candles)
@@ -95,7 +97,12 @@ class ResearchEngine:
 
         # 4. Evaluate setups
         self.signals = self.setups.evaluate_all(
-            self.current_candles, self.swings, self.fvgs, self.obs, self.session_stats
+            self.current_candles,
+            self.swings,
+            self.fvgs,
+            self.obs,
+            self.session_stats_series or self.session_stats,
+            allow_pending=allow_pending,
         )
 
         # 5. Simulate execution

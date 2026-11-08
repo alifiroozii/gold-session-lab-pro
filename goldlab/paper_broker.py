@@ -11,6 +11,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
@@ -589,11 +590,16 @@ class PaperBroker:
         acc = self.accounts[pos.account_id]
         now = datetime.now(TZ_UTC)
 
-        # Gross P&L
+        # Gross P&L using Decimal for precise currency calculations
+        d_exit = Decimal(str(exit_price))
+        d_entry = Decimal(str(pos.entry_price))
+        d_lots = Decimal(str(pos.quantity_lots))
+        d_contract = Decimal(str(acc.contract_size))
         if pos.direction == OrderDirection.BUY:
-            pnl = (exit_price - pos.entry_price) * pos.quantity_lots * acc.contract_size
+            pnl_dec = (d_exit - d_entry) * d_lots * d_contract
         else:
-            pnl = (pos.entry_price - exit_price) * pos.quantity_lots * acc.contract_size
+            pnl_dec = (d_entry - d_exit) * d_lots * d_contract
+        pnl = float(round(pnl_dec, 4))
 
         pos.status = PositionStatus.CLOSED
         pos.close_time = now
@@ -671,12 +677,15 @@ class PaperBroker:
                 continue
 
             acc = self.accounts[pos.account_id]
+            d_entry = Decimal(str(pos.entry_price))
+            d_lots = Decimal(str(pos.quantity_lots))
+            d_contract = Decimal(str(acc.contract_size))
+
             if pos.direction == OrderDirection.BUY:
                 pos.current_price = bid
                 pos.highest_price = max(pos.highest_price, bid)
-                pos.unrealized_pnl = round(
-                    (bid - pos.entry_price) * pos.quantity_lots * acc.contract_size, 4
-                )
+                d_bid = Decimal(str(bid))
+                pos.unrealized_pnl = float(round((d_bid - d_entry) * d_lots * d_contract, 4))
 
                 # Check SL
                 if pos.sl_price is not None and bid <= pos.sl_price:
@@ -695,9 +704,8 @@ class PaperBroker:
             else:  # SELL
                 pos.current_price = ask
                 pos.lowest_price = min(pos.lowest_price, ask)
-                pos.unrealized_pnl = round(
-                    (pos.entry_price - ask) * pos.quantity_lots * acc.contract_size, 4
-                )
+                d_ask = Decimal(str(ask))
+                pos.unrealized_pnl = float(round((d_entry - d_ask) * d_lots * d_contract, 4))
 
                 # Check SL
                 if pos.sl_price is not None and ask >= pos.sl_price:

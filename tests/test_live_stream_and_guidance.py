@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 
 import pytest
 
+from goldlab.agent_bridge import AgentBridge
 from goldlab.market_safety import OandaReadOnlyFeed, execution_gate
 from goldlab.review_journal import DecisionJournal
-from goldlab.agent_bridge import AgentBridge
 
 
 def _provider_event(*, status="tradeable", bid="4387.123", ask="4387.137"):

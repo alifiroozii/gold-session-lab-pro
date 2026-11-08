@@ -8,7 +8,7 @@ All signals generate orders for execution on the NEXT candle open.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
 
 from goldlab.market_structure import MarketStructureAnalyzer
 from goldlab.sessions import SessionManager
@@ -52,16 +52,26 @@ class SetupEngine:
         self.structure = structure or MarketStructureAnalyzer()
         self.session_mgr = session_mgr or SessionManager()
 
+    def _get_stats_at(
+        self, session_stats: Union[dict, List[dict]], idx: int
+    ) -> dict:
+        if isinstance(session_stats, list):
+            if 0 <= idx < len(session_stats):
+                return session_stats[idx]
+            return session_stats[-1] if session_stats else {}
+        return session_stats or {}
+
     def evaluate_all(
         self,
         candles: List[Candle],
         swings: List[SwingPoint],
         fvgs: List[FairValueGap],
         obs: List[OrderBlockProxy],
-        session_stats: dict,
+        session_stats: Union[dict, List[dict]],
+        allow_pending: bool = False,
     ) -> List[SetupSignal]:
-        """
-        Runs all active setup detectors over the closed candle sequence.
+        """Runs all active setup detectors over the closed candle sequence.
+
         Returns a list of generated SetupSignal objects.
         """
         signals: List[SetupSignal] = []
@@ -69,54 +79,63 @@ class SetupEngine:
         if n < 8:
             return signals
 
+        max_i = n if allow_pending else n - 1
+
         # 1. Asia Range Breakout + Retest
         if self.config.enable_asia_breakout:
-            signals.extend(self._detect_asia_breakout(candles, session_stats))
+            signals.extend(self._detect_asia_breakout(candles, session_stats, max_i))
 
         # 2. Sweep + Reclaim + BOS + Retest (Core Liquidity Reversal)
         if self.config.enable_sweep_reclaim_bos:
-            signals.extend(self._detect_sweep_reclaim_bos_retest(candles, swings, session_stats))
+            signals.extend(self._detect_sweep_reclaim_bos_retest(candles, swings, session_stats, max_i))
 
         # 3. Liquidity Sweep + CHoCH
         if self.config.enable_liquidity_choch:
-            signals.extend(self._detect_liquidity_choch(candles, swings))
+            signals.extend(self._detect_liquidity_choch(candles, swings, max_i))
 
         # 4. FVG Mitigation & Retest
         if self.config.enable_fvg_mitigation:
-            signals.extend(self._detect_fvg_mitigation(candles, fvgs))
+            signals.extend(self._detect_fvg_mitigation(candles, fvgs, max_i))
 
         # 5. Order Block Proxy Retest
         if self.config.enable_order_block_proxy:
-            signals.extend(self._detect_order_block_retest(candles, obs))
+            signals.extend(self._detect_order_block_retest(candles, obs, max_i))
 
         # 6. Candlestick Rejections (Pin Bar / Engulfing at Session Levels)
         if self.config.enable_candlestick_rejections:
-            signals.extend(self._detect_candlestick_rejections(candles, session_stats))
+            signals.extend(self._detect_candlestick_rejections(candles, session_stats, max_i))
 
         # 7. Trend Continuation Pullback
         if self.config.enable_trend_continuation:
-            signals.extend(self._detect_trend_continuation(candles, swings))
+            signals.extend(self._detect_trend_continuation(candles, swings, max_i))
 
-        return sorted(signals, key=lambda s: s.signal_index)
+        # Deduplicate signals by (setup_id, direction, signal_index, entry_index)
+        unique_signals: Dict[tuple, SetupSignal] = {}
+        for s in signals:
+            key = (s.setup_id, s.direction.value, s.signal_index, s.entry_index)
+            if key not in unique_signals:
+                unique_signals[key] = s
+
+        return sorted(unique_signals.values(), key=lambda s: s.signal_index)
 
     def _detect_asia_breakout(
-        self, candles: List[Candle], session_stats: dict
+        self, candles: List[Candle], session_stats: Union[dict, List[dict]], max_i: int
     ) -> List[SetupSignal]:
-        """
-        Setup 1: Asia Range Breakout + Close Acceptance + Retest.
-        """
+        """Setup 1: Asia Range Breakout + Close Acceptance + Retest."""
         signals: List[SetupSignal] = []
-        asia = session_stats.get("asia", {})
-        asia_high = asia.get("high")
-        asia_low = asia.get("low")
-        if asia_high is None or asia_low is None:
-            return signals
-
         n = len(candles)
+        start_i = 14 if n > 14 else min(10, max(5, n // 2))
+
         # Look for breakout in recent bars followed by retest
-        for i in range(10, n - 1):
+        for i in range(start_i, max_i):
             c_curr = candles[i]
             c_prev = candles[i - 1]
+            stats_i = self._get_stats_at(session_stats, i)
+            asia = stats_i.get("asia", {})
+            asia_high = asia.get("high")
+            asia_low = asia.get("low")
+            if asia_high is None or asia_low is None:
+                continue
 
             # Bullish Breakout Acceptance and Retest of Asia High
             if c_prev.close > asia_high and c_curr.low <= (asia_high + self.config.retest_tolerance_pips):
@@ -171,10 +190,14 @@ class SetupEngine:
         return signals
 
     def _detect_sweep_reclaim_bos_retest(
-        self, candles: List[Candle], swings: List[SwingPoint], session_stats: dict
+        self,
+        candles: List[Candle],
+        swings: List[SwingPoint],
+        session_stats: Union[dict, List[dict]],
+        max_i: int,
     ) -> List[SetupSignal]:
-        """
-        Setup 2: Sweep + Reclaim + BOS + Retest + Wick Rejection.
+        """Setup 2: Sweep + Reclaim + BOS + Retest + Wick Rejection.
+
         Key liquidity level (PDH/PDL or Asia H/L) is swept, reclaimed, BOS occurs,
         and retest produces a wick rejection. Entry is STRICTLY on the next candle open.
         """
@@ -183,24 +206,26 @@ class SetupEngine:
         if n < 8:
             return signals
 
-        # Reference levels to test against
-        levels = []
-        if session_stats.get("pd", {}).get("high"):
-            levels.append(("PDH", session_stats["pd"]["high"], True))
-        if session_stats.get("pd", {}).get("low"):
-            levels.append(("PDL", session_stats["pd"]["low"], False))
-        if session_stats.get("asia", {}).get("high"):
-            levels.append(("AsiaHigh", session_stats["asia"]["high"], True))
-        if session_stats.get("asia", {}).get("low"):
-            levels.append(("AsiaLow", session_stats["asia"]["low"], False))
+        start_i = min(14, 5)
 
-        for level_name, level_val, is_high in levels:
-            for i in range(5, n - 1):
-                c_retest = candles[i]
-                c_bos = candles[i - 1]
-                c_reclaim = candles[i - 2]
-                c_sweep = candles[i - 3]
+        for i in range(start_i, max_i):
+            c_retest = candles[i]
+            c_bos = candles[i - 1]
+            c_reclaim = candles[i - 2]
+            c_sweep = candles[i - 3]
 
+            stats_i = self._get_stats_at(session_stats, i)
+            levels = []
+            if stats_i.get("pd", {}).get("high"):
+                levels.append(("PDH", stats_i["pd"]["high"], True))
+            if stats_i.get("pd", {}).get("low"):
+                levels.append(("PDL", stats_i["pd"]["low"], False))
+            if stats_i.get("asia", {}).get("high"):
+                levels.append(("AsiaHigh", stats_i["asia"]["high"], True))
+            if stats_i.get("asia", {}).get("low"):
+                levels.append(("AsiaLow", stats_i["asia"]["low"], False))
+
+            for level_name, level_val, is_high in levels:
                 # Bullish Sweep + Reclaim of Low level
                 if not is_high:
                     swept = c_sweep.low < level_val
@@ -272,17 +297,16 @@ class SetupEngine:
         return signals
 
     def _detect_liquidity_choch(
-        self, candles: List[Candle], swings: List[SwingPoint]
+        self, candles: List[Candle], swings: List[SwingPoint], max_i: int
     ) -> List[SetupSignal]:
-        """
-        Setup 3: Liquidity sweep + CHoCH with confirmed swing pivots (only after right_bars).
-        """
+        """Setup 3: Liquidity sweep + CHoCH with confirmed swing pivots (only after right_bars)."""
         signals: List[SetupSignal] = []
         n = len(candles)
 
         for s in swings:
             # Must be strictly past confirmation index to prevent lookahead
-            for i in range(s.confirmed_index + 1, n - 1):
+            start_i = max(14, s.confirmed_index + 1)
+            for i in range(start_i, max_i):
                 c = candles[i]
                 if s.is_high and c.close > s.price:
                     # Bullish CHoCH: closed above confirmed swing high
@@ -332,17 +356,16 @@ class SetupEngine:
         return signals
 
     def _detect_fvg_mitigation(
-        self, candles: List[Candle], fvgs: List[FairValueGap]
+        self, candles: List[Candle], fvgs: List[FairValueGap], max_i: int
     ) -> List[SetupSignal]:
-        """
-        Setup 4: FVG 3-candle sequence, mitigation area retest.
-        """
+        """Setup 4: FVG 3-candle sequence, mitigation area retest."""
         signals: List[SetupSignal] = []
         n = len(candles)
 
         for fvg in fvgs:
             # Check bars after the FVG is fully formed (fvg.end_index + 1 onwards)
-            for i in range(fvg.end_index + 1, min(fvg.end_index + 15, n - 1)):
+            start_i = max(14, fvg.end_index + 1)
+            for i in range(start_i, min(fvg.end_index + 15, max_i)):
                 c = candles[i]
                 if fvg.is_bullish:
                     # Retest into bullish FVG
@@ -394,16 +417,15 @@ class SetupEngine:
         return signals
 
     def _detect_order_block_retest(
-        self, candles: List[Candle], obs: List[OrderBlockProxy]
+        self, candles: List[Candle], obs: List[OrderBlockProxy], max_i: int
     ) -> List[SetupSignal]:
-        """
-        Setup 5: Order block proxy and breaker block proxy retest.
-        """
+        """Setup 5: Order block proxy and breaker block proxy retest."""
         signals: List[SetupSignal] = []
         n = len(candles)
 
         for ob in obs:
-            for i in range(ob.index + 3, min(ob.index + 25, n - 1)):
+            start_i = max(14, ob.index + 3)
+            for i in range(start_i, min(ob.index + 25, max_i)):
                 c = candles[i]
                 if ob.is_bullish:
                     # Retest into Bullish OB top
@@ -454,16 +476,17 @@ class SetupEngine:
         return signals
 
     def _detect_candlestick_rejections(
-        self, candles: List[Candle], session_stats: dict
+        self, candles: List[Candle], session_stats: Union[dict, List[dict]], max_i: int
     ) -> List[SetupSignal]:
-        """
-        Setup 6: Failed breakout, bull/bear trap, engulfing, pin bar, doji, inside bar,
+        """Setup 6: Failed breakout, bull/bear trap, engulfing, pin bar, doji, inside bar,
+
         and high/low wick rejection at key levels.
         """
         signals: List[SetupSignal] = []
         n = len(candles)
+        start_i = 14 if n > 14 else 1
 
-        for i in range(1, n - 1):
+        for i in range(start_i, max_i):
             c = candles[i]
             # Pin bar with >= 60% wick
             is_bull_pin = c.lower_wick >= c.range * 0.60 and c.range > 0
@@ -513,15 +536,14 @@ class SetupEngine:
         return signals
 
     def _detect_trend_continuation(
-        self, candles: List[Candle], swings: List[SwingPoint]
+        self, candles: List[Candle], swings: List[SwingPoint], max_i: int
     ) -> List[SetupSignal]:
-        """
-        Setup 7: Trend continuation and pullback to BOS/level with displacement filter.
-        """
+        """Setup 7: Trend continuation and pullback to BOS/level with displacement filter."""
         signals: List[SetupSignal] = []
         n = len(candles)
+        start_i = min(14, 5)
 
-        for i in range(5, n - 1):
+        for i in range(start_i, max_i):
             c_curr = candles[i]
             c_prev = candles[i - 1]
 
