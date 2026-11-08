@@ -90,6 +90,7 @@ function initTabs() {
             if (targetPane) {
                 targetPane.classList.add("active");
             }
+            document.querySelector(".nav-more")?.removeAttribute("open");
             if (targetId === "tab-chart" && chart) {
                 window.dispatchEvent(new Event("resize"));
             }
@@ -127,6 +128,7 @@ function initChart() {
         }
     });
 
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawSessionBoxes));
     candleSeries = chart.addCandlestickSeries({
         upColor: "#16A34A",
         downColor: "#DC2626",
@@ -801,6 +803,7 @@ function stepReplayNext() {
         candleSeries.setData(subset.map(c => ({
             time: c.time, open: c.open, high: c.high, low: c.low, close: c.close
         })));
+        requestAnimationFrame(drawSessionBoxes);
     } else {
         toggleReplay();
     }
@@ -813,6 +816,7 @@ function stepReplayPrev() {
         candleSeries.setData(subset.map(c => ({
             time: c.time, open: c.open, high: c.high, low: c.low, close: c.close
         })));
+        requestAnimationFrame(drawSessionBoxes);
     }
 }
 
@@ -968,7 +972,7 @@ async function fetchResearchData() {
                 const champEl = document.getElementById("championName");
                 if (champEl) champEl.innerText = data.champion.name;
                 const statsEl = document.getElementById("championStats");
-                if (statsEl) statsEl.innerText = `امید ریاضی: R=${data.champion.expectancy_r.toFixed(2)}`;
+                if (statsEl) statsEl.innerText = data.champion.trades > 0 ? `آمار ثبت‌شده (تأییدنشده): R=${data.champion.expectancy_r.toFixed(2)}` : "بدون بک‌تست معتبر";
             }
             const tbodyJobs = document.querySelector("#supervisorJobsTable tbody");
             if (tbodyJobs && data.recent_jobs) {
@@ -1209,7 +1213,7 @@ function renderHealthGrid() {
     const grid = document.getElementById("healthGrid");
     if (!grid) return;
     const cards = [
-        { title: "ترازنامه دفتر کل (Double-Entry Ledger)", val: "تایید شده (LEDGER_OK)", sub: "تطبیق ۱۰۰٪ موجودی با تراکنش‌های wallet_ledger", ok: true },
+        { title: "ترازنامه دفتر کل", val: "نیازمند ممیزی فعال", sub: "نتیجه از حساب و پایگاه داده باید بررسی شود؛ تأیید نمایشی ممنوع.", ok: false },
         { title: "فید زنده قیمت طلا", val: "در انتظار تأیید فید واقعی", sub: "دمو و کندل تاریخی، قیمت اجرایی نیستند.", ok: false },
         { title: "ناظر مستقل ریسک (Risk Guardian)", val: "محافظت سخت‌گیرانه (Active)", sub: "سقف افت روزانه ۲٪ | سقف ریسک هر معامله ۰.۵٪", ok: true },
         { title: "سرپرست پژوهش چندروزه", val: "زمان‌بندی فعال تأیید نشده", sub: "صف محلی وجود دارد؛ اتصال عامل جداگانه باید فعال شود.", ok: false },
@@ -1230,42 +1234,8 @@ function renderSensitivityMatrix() {
     const container = document.getElementById("sensitivityContainer");
     if (!container) return;
     container.innerHTML = `
-        <div class="table-responsive">
-            <table class="data-table text-center" style="font-size: 12px;">
-                <thead>
-                    <tr>
-                        <th>نسبت سایه \\ ضریب ATR</th>
-                        <th>ATR x 1.0</th>
-                        <th>ATR x 1.5</th>
-                        <th>ATR x 2.0</th>
-                        <th>ATR x 2.5</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Wick > 0.25</strong></td>
-                        <td class="text-green">+0.22 R</td>
-                        <td class="text-green">+0.35 R</td>
-                        <td class="text-green">+0.42 R (بهینه)</td>
-                        <td class="text-blue">+0.18 R</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Wick > 0.40</strong></td>
-                        <td class="text-green">+0.15 R</td>
-                        <td class="text-green">+0.28 R</td>
-                        <td class="text-green">+0.38 R</td>
-                        <td class="text-muted">+0.05 R</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Wick > 0.55</strong></td>
-                        <td class="text-red">-0.10 R</td>
-                        <td class="text-green">+0.08 R</td>
-                        <td class="text-blue">+0.14 R</td>
-                        <td class="text-red">-0.05 R</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <p class="text-muted mt-2" style="font-size: 11px;">ماتریس پایداری نشان می‌دهد پارامترهای نسبت سایه بین 0.25 الی 0.40 همراه با ضریب ATR 2.0 پایدارترین امید ریاضی را تولید می‌کنند.</p>
-    `;
+        <div class="text-muted" style="padding: 20px; text-align:center;">
+            هیچ آزمون حساسیت پارامترها با داده واقعی و نتایج خارج از نمونه تأیید نشده است.
+            اعداد قبلی صرفاً نمایشی بودند و حذف شدند.
+        </div>`;
 }
