@@ -1570,6 +1570,17 @@ async function fetchStrategyState() {
         const res = await fetch("/api/strategy/state", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
+        if (data.runtime_status === "NOT_WIRED_TO_LIVE_CANDLE_LOOP") {
+            if (badgeEl) {
+                badgeEl.textContent = "موتور سشن هنوز به پردازش زنده متصل نیست";
+                badgeEl.title = "ماژول تحقیقاتی وجود دارد، اما به حلقه اجرای کندل و ربات وصل نشده.";
+            }
+            if (lastSigEl) {
+                lastSigEl.textContent = "سیگنال اجرایی تأیید نشده";
+                lastSigEl.className = "text-muted";
+            }
+            return;
+        }
         if (badgeEl && data.current_state) {
             const stateNames = {
                 "WAITING_FOR_SESSION": "در انتظار سشن",
