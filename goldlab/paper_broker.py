@@ -488,6 +488,18 @@ class PaperBroker:
 
         return order
 
+    def cancel_order(self, order_id: str) -> PaperOrder:
+        """Cancels a pending paper order."""
+        order = self.orders.get(order_id)
+        if not order:
+            raise ValueError(f"سفارش {order_id} یافت نشد.")
+        if order.status != OrderStatus.PENDING:
+            raise ValueError(f"تنها سفارش‌های در انتظار (PENDING) قابل لغو هستند. وضعیت فعلی: {order.status.value}")
+
+        order.status = OrderStatus.CANCELLED
+        self._save_order_db(order)
+        return order
+
     def _fill_market_order(self, order: PaperOrder, bid: float, ask: float) -> None:
         """Fills a market order: Buy at Ask + slippage, Sell at Bid - slippage."""
         acc = self.accounts[order.account_id]

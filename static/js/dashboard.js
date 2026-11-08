@@ -1238,18 +1238,57 @@ async function fetchAgentAdvice() {
         const resp = await fetch("/api/agent/advice?limit=8", {cache:"no-store"});
         if (!resp.ok) return;
         const data = await resp.json();
-        const items = data.items || [];
-        el.innerHTML = items.length ? items.map(item => `
-            <div class="agent-event">
-                <span class="agent-event-time">${safeText(toShamsiDateTime(item.timestamp))}</span>
-                <strong>${safeText(item.reason)}</strong>
-                <span>${safeText(item.guidance)}</span>
-                <small>قانون ایمنی ثبت‌شده؛ نه توصیهٔ مبتنی بر یادگیری یا معاملهٔ خودکار</small>
-            </div>`).join("") : "هنوز هشدار ایمنی مشاهده و ثبت نشده است.";
+        const safetyItems = data.safety_lessons || data.items || [];
+        const tradeItems = data.trade_guidance || [];
+        let html = "";
+        if (safetyItems.length > 0) {
+            html += `<h5 style="margin: 8px 0 4px; color: var(--gold-primary);">قوانین بازدارنده و سدهای ایمنی:</h5>` + safetyItems.map(item => `
+                <div class="agent-event">
+                    <span class="agent-event-time">${safeText(toShamsiDateTime(item.timestamp))}</span>
+                    <strong>${safeText(item.reason)}</strong>
+                    <span>${safeText(item.guidance)}</span>
+                    <small>سد ایمنی قطعی؛ جلوگیری از معامله نامعتبر</small>
+                </div>`).join("");
+        }
+        if (tradeItems.length > 0) {
+            html += `<h5 style="margin: 12px 0 4px; color: var(--blue-accent);">درس‌های استخراج‌شده از کالبدشکافی معاملات:</h5>` + tradeItems.map(item => `
+                <div class="agent-event">
+                    <span class="agent-event-time">${safeText(toShamsiDateTime(item.created_at))}</span>
+                    <strong>${safeText(item.setup_id)} (${safeText(item.side)}) — ${item.pnl >= 0 ? '<span class="text-green">سود +' + item.pnl + '$</span>' : '<span class="text-red">زیان ' + item.pnl + '$</span>'} [${safeText(item.failure_category)}]</strong>
+                    <div style="font-size: 12px; margin-top: 3px;"><strong>علت ریشه‌ای:</strong> ${safeText(item.what_went_wrong)}</div>
+                    <div style="font-size: 12px; color: #ffb74d;"><strong>چه کاری تکرار نشود:</strong> ${safeText(item.what_not_to_repeat)}</div>
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">چک‌لیست: ${safeText(item.pre_trade_checklist)} | قانون: ${safeText(item.gating_rule)} (${safeText(item.confidence)})</div>
+                </div>`).join("");
+        }
+        el.innerHTML = html || "هنوز هشدار ایمنی یا کالبدشکافی معامله‌ای ثبت نشده است.";
     } catch (_err) {
         el.textContent = "دریافت دفترچهٔ ایمنی ناموفق بود.";
     }
 }
+
+window.emergencyStop = async function() {
+    if (!confirm("آیا از فعال‌سازی توقف اضطراری (Emergency Stop) اطمینان دارید؟ کلیه معاملات خودکار مسدود خواهند شد.")) return;
+    try {
+        const resp = await fetch("/api/bot/emergency-stop", { method: "POST" });
+        const res = await resp.json();
+        alert(res.message);
+        fetchBotStatus();
+    } catch (e) {
+        console.error(e);
+    }
+};
+
+window.resumeBot = async function() {
+    if (!confirm("آیا مایلید ربات را از حالت توقف خارج و آماده‌باش قرار دهید؟")) return;
+    try {
+        const resp = await fetch("/api/bot/resume", { method: "POST" });
+        const res = await resp.json();
+        alert(res.message);
+        fetchBotStatus();
+    } catch (e) {
+        console.error(e);
+    }
+};
 
 // 16. Institutional Grids & Health Monitors Initializer
 document.addEventListener("DOMContentLoaded", () => {

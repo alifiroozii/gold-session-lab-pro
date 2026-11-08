@@ -4,10 +4,10 @@
   "strategy_profitable": null,
   "authorizes_paper_auto": false,
   "timeframe": "5m",
-  "trades_in_backtest": 618,
+  "trades_in_backtest": 691,
   "signal_contract": {
     "status": "PASS",
-    "checked_signals": 618,
+    "checked_signals": 691,
     "checked_candles": 1400,
     "findings": [],
     "authorizes_paper_auto": false
@@ -15,7 +15,7 @@
   "point_in_time": {
     "status": "PASS",
     "sampled_signals": 12,
-    "total_signals": 618,
+    "total_signals": 691,
     "findings": [],
     "authorizes_paper_auto": false
   },

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set, Tuple
 
 from goldlab.engine import ResearchEngine
 from goldlab.paper_broker import OrderDirection, OrderType, PaperBroker
@@ -67,6 +67,8 @@ class AutomatedPaperBot:
         self.consecutive_losses: int = 0
         self.cooldown_remaining_bars: int = 0
         self.daily_start_balance: float = 10000.0
+        self.last_trade_date: Optional[str] = None
+        self.dispatched_signals: Set[Tuple[str, str, int]] = set()
         self.last_evaluation_time: Optional[datetime] = None
         self.heartbeat_time: datetime = datetime.now(TZ_UTC)
 
@@ -105,6 +107,30 @@ class AutomatedPaperBot:
         self.state = new_state
         self.log_event("STATE_CHANGE", f"وضعیت ربات از {old_state.value} به {new_state.value} تغییر یافت.")
 
+    def emergency_stop(self, reason: str = "توقف اضطراری توسط اپراتور") -> None:
+        """Immediately halts all automated trading and locks bot into STOPPED state."""
+        self.set_state(BotState.STOPPED)
+        self.log_event("EMERGENCY_STOP", reason)
+
+    def resume_after_emergency_stop(self, target_state: BotState = BotState.ANALYSIS_ONLY) -> None:
+        """Explicit operator-approved recovery after emergency stop."""
+        if self.state == BotState.STOPPED:
+            self.log_event("MANUAL_REACTIVATION", f"فعال‌سازی مجدد پس از توقف اضطراری به وضعیت {target_state.value}")
+            self.set_state(target_state)
+
+    def on_trade_closed(self, pnl: float) -> None:
+        """Updates consecutive loss counter and activates cooldown if limit reached."""
+        if pnl < 0:
+            self.consecutive_losses += 1
+            if self.consecutive_losses >= self.risk.consecutive_losses_limit:
+                self.cooldown_remaining_bars = self.risk.cooldown_bars
+                self.log_event(
+                    "COOLDOWN_ACTIVATED",
+                    f"{self.consecutive_losses} زیان متوالی رخ داد. کول‌داون به مدت {self.risk.cooldown_bars} کندل فعال گردید.",
+                )
+        else:
+            self.consecutive_losses = 0
+
     def on_candle_close(
         self,
         closed_candles: List[Candle],
@@ -122,6 +148,18 @@ class AutomatedPaperBot:
         """
         self.heartbeat_time = current_time or datetime.now(TZ_UTC)
         self.last_evaluation_time = self.heartbeat_time
+
+        if self.state == BotState.STOPPED:
+            return []
+
+        # Reset daily counters at midnight UTC
+        current_date_str = self.heartbeat_time.strftime("%Y-%m-%d")
+        if self.last_trade_date != current_date_str:
+            self.last_trade_date = current_date_str
+            self.today_trades_count = 0
+            acc_initial = self.broker.accounts.get(self.account_id)
+            if acc_initial:
+                self.daily_start_balance = acc_initial.equity
 
         if not closed_candles:
             return []
@@ -155,11 +193,25 @@ class AutomatedPaperBot:
                 self.log_event("RISK_LIMIT", f"حداکثر زیان روزانه ({self.risk.max_daily_loss_pct}%) لمس شد. ربات متوقف گردید.")
             return []
 
+        # Check consecutive loss cooldown
+        in_cooldown = False
+        if self.cooldown_remaining_bars > 0:
+            self.cooldown_remaining_bars -= 1
+            in_cooldown = True
+            if self.state == BotState.PAPER_AUTO:
+                self.log_event("COOLDOWN_BLOCK", f"کول‌داون پس از زیان فعال است ({self.cooldown_remaining_bars + 1} کندل باقی‌مانده).")
+
         # Check max open positions
         open_positions = [
             p for p in self.broker.positions.values() if p.account_id == self.account_id and p.status.value == "OPEN"
         ]
         if len(open_positions) >= self.risk.max_open_positions:
+            return []
+
+        # Check max daily trades
+        if self.today_trades_count >= self.risk.max_daily_trades:
+            if self.state == BotState.PAPER_AUTO:
+                self.log_event("MAX_DAILY_TRADES", f"سقف معاملات روزانه ({self.risk.max_daily_trades}) تکمیل شد.")
             return []
 
         # 3. News Blackout Check
@@ -175,7 +227,7 @@ class AutomatedPaperBot:
         new_signals = [s for s in self.engine.signals if s.signal_index == len(self.engine.current_candles) - 1]
 
         # 5. Paper Auto Dispatch
-        if self.state == BotState.PAPER_AUTO and new_signals:
+        if self.state == BotState.PAPER_AUTO and new_signals and not in_cooldown:
             spread = current_ask - current_bid
             if spread > self.risk.max_spread_pips:
                 self.log_event("SPREAD_FILTER", f"اسپرد جاری (${spread:.2f}) بالاتر از سقف مجاز (${self.risk.max_spread_pips:.2f}) است.")
@@ -184,6 +236,13 @@ class AutomatedPaperBot:
             for sig in new_signals:
                 if len(open_positions) >= self.risk.max_open_positions:
                     break
+                if self.today_trades_count >= self.risk.max_daily_trades:
+                    break
+
+                # Prevent duplicate order for identical signal
+                sig_key = (sig.setup_id, sig.direction.value, sig.signal_index)
+                if sig_key in self.dispatched_signals:
+                    continue
 
                 # Position sizing based on 0.5% risk
                 risk_dollars = acc.balance * (self.risk.risk_per_trade_pct / 100.0)
@@ -208,9 +267,12 @@ class AutomatedPaperBot:
                     current_ask=current_ask,
                 )
                 self.today_trades_count += 1
+                self.dispatched_signals.add(sig_key)
                 self.log_event(
                     "ORDER_DISPATCHED",
                     f"ارسال سفارش مجازی {direction.value} {lots} لات به استراتژی {sig.setup_name} (سفارش #{order.order_id})",
                 )
+
+        return new_signals
 
         return new_signals

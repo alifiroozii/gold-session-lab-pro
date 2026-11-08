@@ -41,7 +41,7 @@ from goldlab.market_safety import (
     execution_gate,
 )
 from goldlab.ml_model import MLTradeQualityModel
-from goldlab.paper_broker import OrderDirection, OrderStatus, OrderType, PaperBroker
+from goldlab.paper_broker import OrderDirection, OrderType, PaperBroker
 from goldlab.promotion import ChampionChallengerManager
 from goldlab.regime import MarketRegimeMonitor
 from goldlab.review_journal import DecisionJournal
@@ -244,6 +244,7 @@ async def oanda_stream_loop() -> None:
                         for pid in opened_before:
                             pos = broker.positions.get(pid)
                             if pos and pos.status.value == "CLOSED":
+                                bot.on_trade_closed(pos.realized_pnl)
                                 if agent_bridge.record_closed_paper_trade(
                                     trade_id=pid, direction=pos.direction.value,
                                     entry_price=pos.entry_price,
@@ -312,6 +313,19 @@ async def market_heartbeat_loop() -> None:
                         engine.load_candles(bars, timeframe=engine.current_timeframe)
                         engine.market_data_source = "OANDA_HISTORICAL_MID"
                         engine.run_pipeline()
+                        if verified_quote:
+                            bot_signals = bot.on_candle_close(
+                                bars,
+                                current_bid=verified_quote.bid,
+                                current_ask=verified_quote.ask,
+                                current_time=bars[-1].timestamp,
+                            )
+                            if bot_signals:
+                                await ws_manager.broadcast_json({
+                                    "type": "NEW_SIGNALS",
+                                    "count": len(bot_signals),
+                                    "timestamp": bars[-1].timestamp.isoformat(),
+                                })
                         await ws_manager.broadcast_json({
                             "type": "CANDLES_UPDATED", "source": "OANDA_HISTORICAL_MID",
                             "timestamp": bars[-1].timestamp.isoformat(),
@@ -610,6 +624,7 @@ async def close_position_endpoint(pos_id: str) -> Dict[str, Any]:
         sl_price=pos.sl_price or (pos.entry_price - 2.0),
         tp_price=pos.tp_price or (pos.entry_price + 4.0),
     )
+    bot.on_trade_closed(closed_pos.realized_pnl)
     agent_bridge.record_closed_paper_trade(
         trade_id=pos.position_id, direction=pos.direction.value,
         entry_price=pos.entry_price, exit_price=exit_p,
@@ -675,12 +690,11 @@ async def submit_order_endpoint(req: OrderRequest) -> Dict[str, Any]:
 
 @app.post("/api/broker/orders/{order_id}/cancel")
 async def cancel_order_endpoint(order_id: str) -> Dict[str, str]:
-    order = broker.orders.get(order_id)
-    if not order or order.status.value != "PENDING":
-        raise HTTPException(status_code=404, detail="سفارش معلق یافت نشد.")
-    order.status = OrderStatus.CANCELLED
-    broker._save_order_db(order)
-    return {"status": "success"}
+    try:
+        broker.cancel_order(order_id)
+        return {"status": "success", "message": f"سفارش {order_id} با موفقیت لغو شد."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/broker/ledger")
@@ -711,6 +725,9 @@ async def get_bot_status() -> Dict[str, Any]:
         "state": bot.state.value,
         "heartbeat": bot.heartbeat_time.isoformat(),
         "today_trades_count": bot.today_trades_count,
+        "consecutive_losses": bot.consecutive_losses,
+        "cooldown_remaining_bars": bot.cooldown_remaining_bars,
+        "daily_start_balance": bot.daily_start_balance,
         "events": events,
         "risk_settings": {
             "risk_per_trade_pct": bot.risk.risk_per_trade_pct,
@@ -749,6 +766,28 @@ async def set_bot_risk_endpoint(req: BotRiskRequest) -> Dict[str, str]:
     bot.risk.max_spread_pips = req.max_spread_pips
     bot.log_event("RISK_UPDATED", "تنظیمات مدیریت ریسک ربات به‌روزرسانی شد.")
     return {"status": "success"}
+
+
+@app.post("/api/bot/emergency-stop")
+async def emergency_stop_endpoint() -> Dict[str, str]:
+    bot.emergency_stop(reason="توقف اضطراری فعال شد توسط کاربر")
+    await ws_manager.broadcast_json({
+        "type": "BOT_STATE",
+        "state": bot.state.value,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+    return {"status": "success", "message": "توقف اضطراری فعال شد و کلیه معاملات خودکار مسدود گردید."}
+
+
+@app.post("/api/bot/resume")
+async def resume_bot_endpoint() -> Dict[str, str]:
+    bot.resume_after_emergency_stop(target_state=BotState.ANALYSIS_ONLY)
+    await ws_manager.broadcast_json({
+        "type": "BOT_STATE",
+        "state": bot.state.value,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+    return {"status": "success", "message": "ربات از حالت توقف اضطراری خارج و در وضعیت تحلیل قرار گرفت."}
 
 
 # --- Backtest Endpoints ---
@@ -802,10 +841,12 @@ async def get_agent_status() -> Dict[str, Any]:
 
 @app.get("/api/agent/advice")
 async def get_agent_advice(limit: int = 15) -> Dict[str, Any]:
-    """Observed next-time safety advice; deterministic, NOT claimed AI learning."""
+    """Observed next-time safety advice and post-trade autopsies; deterministic, NOT claimed AI learning."""
     return {
-        "kind": "DETERMINISTIC_SAFETY_RULES_NOT_AI_PREDICTIONS",
+        "kind": "DETERMINISTIC_SAFETY_RULES_AND_TRADE_AUTOPSIES",
         "items": decision_journal.recent(limit),
+        "safety_lessons": decision_journal.recent(limit),
+        "trade_guidance": learning.get_next_time_guidance(limit),
         "paper_auto_enabled": False,
         "antigravity_autonomous_agent_attached": False,
     }
@@ -955,6 +996,15 @@ async def get_latest_report() -> Dict[str, Any]:
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket) -> None:
+    # Validate origin: allow local connections only (CSWSH defense)
+    origin = websocket.headers.get("origin")
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        allowed_hosts = {"localhost", "127.0.0.1", "0.0.0.0"}
+        if parsed.hostname not in allowed_hosts:
+            await websocket.close(code=1008)
+            return
     await ws_manager.connect(websocket)
     try:
         while True:

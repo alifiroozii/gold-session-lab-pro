@@ -31,6 +31,7 @@ class SetupConfig:
     enable_order_block_proxy: bool = True
     enable_candlestick_rejections: bool = True
     enable_trend_continuation: bool = True
+    enable_combined_structural: bool = True
     enable_mtf_confluence: bool = False
 
     retest_tolerance_pips: float = 0.50  # Gold $0.50 tolerance
@@ -108,6 +109,12 @@ class SetupEngine:
         # 7. Trend Continuation Pullback
         if self.config.enable_trend_continuation:
             signals.extend(self._detect_trend_continuation(candles, swings, max_i))
+
+        # 8. Combined Structural Model
+        if self.config.enable_combined_structural:
+            signals.extend(
+                self._detect_combined_structural_model(candles, swings, fvgs, session_stats, max_i)
+            )
 
         # Deduplicate signals by (setup_id, direction, signal_index, entry_index)
         unique_signals: Dict[tuple, SetupSignal] = {}
@@ -571,5 +578,139 @@ class SetupEngine:
                                 reason="Bullish displacement followed by high-level consolidation pullback",
                             )
                         )
+            elif c_prev.displacement and c_prev.close < c_prev.open:  # Bearish impulse
+                # Shallow pullback holding lower half of previous bar
+                half_level = (c_prev.open + c_prev.close) / 2.0
+                if c_curr.high <= half_level and c_curr.close < half_level:
+                    entry = candles[i + 1].open if i + 1 < n else c_curr.close
+                    sl = round(c_prev.high, 4)
+                    risk = sl - entry
+                    if risk > 0:
+                        signals.append(
+                            SetupSignal(
+                                setup_id="SETUP_7_TREND_CONTINUATION",
+                                setup_name="Trend Continuation Pullback",
+                                direction=SignalDirection.SELL,
+                                signal_index=i,
+                                signal_time=c_curr.timestamp,
+                                entry_index=i + 1,
+                                entry_price=entry,
+                                sl_price=sl,
+                                tp_price=round(entry - (risk * self.config.risk_reward_ratio), 4),
+                                risk_r=round(risk, 4),
+                                reason="Bearish displacement followed by shallow consolidation pullback",
+                            )
+                        )
+
+        return signals
+
+    def _detect_combined_structural_model(
+        self,
+        candles: List[Candle],
+        swings: List[SwingPoint],
+        fvgs: List[FairValueGap],
+        session_stats: Union[dict, List[dict]],
+        max_i: int,
+    ) -> List[SetupSignal]:
+        """Setup 8: Combined Structural Model (Liquidity Sweep + BOS + FVG + Retest).
+
+        Synergistic confluence of:
+        1. Liquidity sweep of key level (Asia H/L or PDH/PDL)
+        2. Break of Structure (BOS)
+        3. FVG retest / mitigation
+        4. Causal execution strictly on following candle open (t+1).
+        """
+        signals: List[SetupSignal] = []
+        n = len(candles)
+        if n < 8:
+            return signals
+
+        start_i = max(14, 6)
+
+        for i in range(start_i, max_i):
+            c_curr = candles[i]
+            c_prev = candles[i - 1]
+            stats_i = self._get_stats_at(session_stats, i)
+
+            # Check key levels
+            levels = []
+            if stats_i.get("asia", {}).get("high"):
+                levels.append(("AsiaHigh", stats_i["asia"]["high"], True))
+            if stats_i.get("asia", {}).get("low"):
+                levels.append(("AsiaLow", stats_i["asia"]["low"], False))
+            if stats_i.get("pd", {}).get("high"):
+                levels.append(("PDH", stats_i["pd"]["high"], True))
+            if stats_i.get("pd", {}).get("low"):
+                levels.append(("PDL", stats_i["pd"]["low"], False))
+
+            for lvl_name, lvl_val, is_high in levels:
+                if not is_high:
+                    # Bullish Confluence: Swept low in recent bars, reclaimed, and now retesting with rejection
+                    sweep_window = candles[max(0, i - 5):i - 1]
+                    if not sweep_window:
+                        continue
+                    swept = any(c.low < lvl_val for c in sweep_window)
+                    reclaimed = c_prev.close > lvl_val
+                    if (
+                        swept
+                        and reclaimed
+                        and c_curr.close > lvl_val
+                        and c_curr.lower_wick >= c_curr.range * self.config.min_wick_ratio
+                    ):
+                        entry = candles[i + 1].open if i + 1 < n else c_curr.close
+                        sl = round(min(c.low for c in sweep_window) - (c_curr.atr14 * 0.5), 4)
+                        risk = entry - sl
+                        if risk > 0:
+                            tp = round(entry + (risk * self.config.risk_reward_ratio), 4)
+                            signals.append(
+                                SetupSignal(
+                                    setup_id="SETUP_8_COMBINED_STRUCTURAL",
+                                    setup_name="Combined Structural Model",
+                                    direction=SignalDirection.BUY,
+                                    signal_index=i,
+                                    signal_time=c_curr.timestamp,
+                                    entry_index=i + 1,
+                                    entry_price=entry,
+                                    sl_price=sl,
+                                    tp_price=tp,
+                                    risk_r=round(risk, 4),
+                                    reason=f"Bullish combined structural confluence: sweep of {lvl_name} ({lvl_val}), reclaim & wick rejection",
+                                    metrics={"level": lvl_name, "level_val": lvl_val},
+                                )
+                            )
+                else:
+                    # Bearish Confluence: Swept high in recent bars, reclaimed below, and now retesting with rejection
+                    sweep_window = candles[max(0, i - 5):i - 1]
+                    if not sweep_window:
+                        continue
+                    swept = any(c.high > lvl_val for c in sweep_window)
+                    reclaimed = c_prev.close < lvl_val
+                    if (
+                        swept
+                        and reclaimed
+                        and c_curr.close < lvl_val
+                        and c_curr.upper_wick >= c_curr.range * self.config.min_wick_ratio
+                    ):
+                        entry = candles[i + 1].open if i + 1 < n else c_curr.close
+                        sl = round(max(c.high for c in sweep_window) + (c_curr.atr14 * 0.5), 4)
+                        risk = sl - entry
+                        if risk > 0:
+                            tp = round(entry - (risk * self.config.risk_reward_ratio), 4)
+                            signals.append(
+                                SetupSignal(
+                                    setup_id="SETUP_8_COMBINED_STRUCTURAL",
+                                    setup_name="Combined Structural Model",
+                                    direction=SignalDirection.SELL,
+                                    signal_index=i,
+                                    signal_time=c_curr.timestamp,
+                                    entry_index=i + 1,
+                                    entry_price=entry,
+                                    sl_price=sl,
+                                    tp_price=tp,
+                                    risk_r=round(risk, 4),
+                                    reason=f"Bearish combined structural confluence: sweep of {lvl_name} ({lvl_val}), reclaim & wick rejection",
+                                    metrics={"level": lvl_name, "level_val": lvl_val},
+                                )
+                            )
 
         return signals
