@@ -82,3 +82,22 @@ def test_no_provider_defaults_to_no_chart_data(monkeypatch):
             # Demo data is explicitly opted in for replay only.
             import os
             assert os.getenv("GOLDLAB_ENABLE_DEMO_REPLAY") == "1"
+
+
+def test_paper_close_saved_once_without_ai_verdict(tmp_path):
+    bridge = AgentBridge(str(tmp_path / "trades.sqlite"))
+    trade = dict(
+        trade_id="PAPER-1", direction="BUY", entry_price=4390.12,
+        exit_price=4387.75, realized_pnl=-23.7, close_reason="STOP_LOSS",
+    )
+    assert bridge.record_closed_paper_trade(**trade) is True
+    assert bridge.record_closed_paper_trade(**trade) is False
+    assert bridge.observe_local_issues() == 1
+    handoff = tmp_path / "CLOSED_TASK.md"
+    bridge.write_handoff(str(handoff))
+    text = handoff.read_text(encoding="utf-8")
+    assert "PAPER-1" in text
+    assert "STOP_LOSS" in text
+    assert "AWAITING_REVIEW" in text
+    assert "normal losses" not in text.lower() or "Normal losses" in text
+    assert bridge.state()["agent_status"] == "NOT_CONNECTED"
