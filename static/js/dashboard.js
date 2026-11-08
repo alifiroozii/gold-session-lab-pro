@@ -255,8 +255,8 @@ function renderMarketData(data) {
         ? "کندل‌های واقعی OANDA (Mid، بسته‌شده) + قیمت لحظه‌ای Bid/Ask"
         : (data.data_source === "DEMO_CSV"
             ? "حالت بازپخش آموزشی — داده ساختگی، غیرقابل معامله"
-            : "بدون داده معتبر؛ برای نمایش چارت واقعی فید OANDA را متصل کنید");
-    if (label) label.textContent = "چارت: " + sourceText;
+            : "بدون دادهٔ پژوهشی؛ چارت مرجع TradingView جداگانه در دسترس است");
+    if (label) label.textContent = "چارت پژوهشی: " + sourceText;
     if (data.execution) updateExecutionBadge(data.execution);
     if (!data.candles || data.candles.length === 0) {
         currentMarketData = data;
