@@ -41,4 +41,4 @@ def test_supervisor_nightly_evaluation_report_generation(test_supervisor_env):
     content = report_path.read_text(encoding="utf-8")
     assert "گزارش جامع روزانه آزمایشگاه خودکار طلا" in content
     assert "Double-Entry Invariance" in content
-    assert "Ledger Invariance OK" in content
+    assert "Ledger Invariance OK" not in content  # Don't claim an audit that was not run
