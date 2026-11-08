@@ -49,6 +49,7 @@ from goldlab.review_journal import DecisionJournal
 from goldlab.state_machine import SessionTradingStateMachine
 from goldlab.strategy_validation_lab import StrategyValidationLab
 from goldlab.supervisor import JobType, ResearchSupervisor
+from goldlab.session_workspace import SessionWorkspace
 
 TZ_UTC = timezone.utc
 
@@ -109,6 +110,7 @@ diagnostics = DiagnosticsEngine(db_path=DB_PATH)
 autofix = SafeAutoFixEngine(db_path=DB_PATH)
 agent_bridge = AgentBridge(db_path=DB_PATH)
 decision_journal = DecisionJournal(db_path=DB_PATH)
+session_workspace = SessionWorkspace(DB_PATH)
 learning = MistakeAnalyzerAndHypothesisRegistry(db_path=DB_PATH)
 ml_model = MLTradeQualityModel(db_path=DB_PATH, shadow_mode=True)
 promotion = ChampionChallengerManager(db_path=DB_PATH)
@@ -207,6 +209,30 @@ async def _broadcast_market_unavailable(reason: str) -> None:
     })
 
 
+def record_paper_position_events(opened_before, quote: MarketQuote) -> List[str]:
+    """Persist real closes before notifying the strategy; associate only its own order."""
+    closed = []
+    for pid, pos in broker.positions.items():
+        setup = session_state_machine.active_setup
+        belongs_to_setup = setup is not None and setup.order_id == pos.order_id
+        if pid in opened_before and pos.status.value == "CLOSED":
+            recorded = agent_bridge.record_closed_paper_trade(
+                trade_id=pid, direction=pos.direction.value, entry_price=pos.entry_price,
+                exit_price=pos.close_price if pos.close_price is not None else pos.current_price,
+                realized_pnl=pos.realized_pnl, close_reason=pos.close_reason or "CLOSED",
+                quote_source=quote.source,
+            )
+            if recorded:
+                closed.append(pid)
+                bot.on_trade_closed(pos.realized_pnl)
+            if belongs_to_setup:
+                session_state_machine.on_position_closed(quote, pos.close_reason or "CLOSED")
+        elif pid not in opened_before and pos.status.value == "OPEN" and belongs_to_setup:
+            if setup.position_id != pid:
+                session_state_machine.on_position_opened(pid, quote)
+    return closed
+
+
 async def oanda_stream_loop() -> None:
     """Consume OANDA's official account-specific PRICE stream (max 4 updates/s).
 
@@ -259,30 +285,7 @@ async def oanda_stream_loop() -> None:
                             if pos.status.value == "OPEN"
                         }
                         broker.on_tick(quote.bid, quote.ask, timestamp=quote.timestamp)
-                        closed = []
-                        for pid in opened_before:
-                            pos = broker.positions.get(pid)
-                            if pos and pos.status.value == "CLOSED":
-                                bot.on_trade_closed(pos.realized_pnl)
-                                if session_state_machine.active_setup:
-                                    session_state_machine.on_position_closed(
-                                        exit_price=pos.close_price if pos.close_price is not None else pos.current_price,
-                                        pnl=pos.realized_pnl,
-                                        close_reason=pos.close_reason or "CLOSED",
-                                    )
-                                if agent_bridge.record_closed_paper_trade(
-                                    trade_id=pid, direction=pos.direction.value,
-                                    entry_price=pos.entry_price,
-                                    exit_price=pos.close_price if pos.close_price is not None else pos.current_price,
-                                    realized_pnl=pos.realized_pnl,
-                                    close_reason=pos.close_reason or "CLOSED",
-                                    quote_source=quote.source,
-                                ):
-                                    closed.append(pid)
-                        for pid, pos in broker.positions.items():
-                            if pid not in opened_before and pos.status.value == "OPEN":
-                                if session_state_machine.active_setup:
-                                    session_state_machine.on_position_opened(pid, pos.entry_price)
+                        closed = record_paper_position_events(opened_before, quote)
                         if closed:
                             count = agent_bridge.observe_local_issues()
                             await asyncio.to_thread(agent_bridge.write_handoff)
@@ -366,6 +369,7 @@ async def market_heartbeat_loop() -> None:
                 try:
                     bars = await asyncio.to_thread(market_feed.historical_m1)
                     if bars:
+                        await asyncio.to_thread(session_workspace.save_provider_candles, bars)
                         await asyncio.to_thread(process_provider_candles, bars)
                         if verified_quote:
                             bot_signals = bot.on_candle_close(
@@ -482,6 +486,23 @@ def get_execution_status() -> Dict[str, Any]:
 @app.get("/api/market/status")
 async def get_market_status() -> Dict[str, Any]:
     return get_execution_status()
+
+
+@app.get("/api/sessions/calendar")
+async def get_session_calendar(days: int = 7) -> Dict[str, Any]:
+    return await asyncio.to_thread(session_workspace.calendar, days=days)
+
+
+@app.get("/api/research/session-plan")
+async def get_session_research_plan() -> Dict[str, Any]:
+    return await asyncio.to_thread(session_workspace.research)
+
+
+@app.post("/api/research/session-plan/queue")
+async def queue_session_research() -> Dict[str, Any]:
+    added = await asyncio.to_thread(session_workspace.queue_research)
+    await asyncio.to_thread(agent_bridge.write_handoff)
+    return {"added": added, "status": "QUEUED_FOR_REVIEW", "ai_executed": False}
 
 
 async def fetch_tradingview_quote_async() -> Optional[Dict[str, Any]]:

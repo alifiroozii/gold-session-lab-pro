@@ -136,7 +136,7 @@
     <nav class="nav-tabs" aria-label="ناوبری اصلی">
         <button class="nav-btn active" data-tab="tab-chart">📊 چارت و سشن‌ها</button>
         <button class="nav-btn" data-tab="tab-positions">💼 معاملات مجازی</button>
-        <button class="nav-btn" data-tab="tab-ai-research">🧠 مرکز تحلیل و یادگیری</button>
+        <button class="nav-btn" data-tab="tab-ai-research">🧠 ناظر هوشمند</button>
     </nav>
 
     <!-- MAIN VIEW CONTAINER -->
@@ -144,6 +144,15 @@
 
         <!-- TAB 1: CHART & SESSIONS -->
         <div class="tab-pane active" id="tab-chart">
+            <section class="session-workspace" aria-labelledby="sessionWorkspaceTitle">
+                <div class="session-heading"><div><span class="eyebrow">نقشهٔ روز معاملاتی</span><h2 id="sessionWorkspaceTitle">سشن‌ها، از شروع تا پایان</h2><p>ساعت‌ها به وقت تهران هستند؛ با بازکردن دوبارهٔ برنامه، زمان‌بندی گذشته بازسازی می‌شود.</p></div><span id="sessionSyncStatus" role="status">در حال دریافت…</span></div>
+                <div id="sessionNowCards" class="session-now-grid"></div>
+                <details class="session-history" open><summary>سشن‌های قبلی و برنامهٔ فردا</summary>
+                    <div class="session-history-controls"><label>بازهٔ نمایش <select id="sessionHistoryDays"><option value="7">۷ روز اخیر</option><option value="14">۱۴ روز اخیر</option><option value="30">۳۰ روز اخیر</option></select></label><label>روز <select id="sessionHistoryDate"></select></label></div>
+                    <div class="table-responsive"><table class="data-table"><thead><tr><th>سشن</th><th>شروع تهران</th><th>پایان تهران</th><th>وضعیت</th><th>سقف / کف مشاهده‌شده</th><th>پوشش داده</th></tr></thead><tbody id="sessionHistoryRows"></tbody></table></div>
+                </details>
+                <p class="session-note">زمان‌بندی با تعطیلات آخر هفته و تغییر ساعت لندن، نیویورک و سیدنی تطبیق داده می‌شود. تعطیلات خاص و مجوز معامله را فید بروکر تعیین می‌کند. محدودهٔ مرجع آسیا با سشن توکیو متفاوت است.</p>
+            </section>
             <div class="chart-layout">
                 <div class="chart-main-column">
                     <div class="chart-source-switch" role="group" aria-label="منبع چارت">
@@ -493,6 +502,13 @@
 
         <!-- TAB 3: RESEARCH & LEARNING HUB -->
         <div class="tab-pane" id="tab-ai-research">
+            <section class="research-playbook">
+                <span class="eyebrow">آزمایشگاه حساب ۱۰۰۰دلاری</span><h2>قبل از معامله، یک فرضیهٔ قابل آزمون</h2>
+                <p>مبنای پژوهش: ۱۰۰۰ دلار مجازی. موتور فعلی روی ۵دقیقه است؛ بهترین تایم‌فریم هنوز مشخص نیست. ۱، ۵ و ۱۵دقیقه باید با دادهٔ یکسان، هزینه و بازهٔ خارج از نمونه مقایسه شوند.</p>
+                <ol class="strategy-step-list"><li><strong>محدوده سشن</strong><span>سقف و کف فقط از کندل‌های بسته و موجود تا لحظهٔ تصمیم</span></li><li><strong>شکست یا شکار نقدینگی</strong><span>شکست و بازگشت به سطح (Retest)، یا Sweep و بازپس‌گیری (Reclaim)</span></li><li><strong>تأیید ساختار</strong><span>بسته‌شدن کندل، BOS / CHoCH و واکنش سایه؛ ورود زودهنگام ممنوع</span></li><li><strong>کنترل معامله</strong><span>مظنهٔ تازه، حد ضرر و سود، ریسک و اسپرد؛ ورود در رویداد بعدی مجاز</span></li><li><strong>بازبینی و آزمایش</strong><span>ثبت علت ورود و خروج؛ تفکیک زیان عادی از نقض قانون؛ اصلاح در شاخهٔ آزمایشی</span></li></ol>
+                <div class="research-plan-footer"><button id="btnQueueSessionResearch" class="btn btn-primary">ثبت طرح مقایسه برای Antigravity</button><span id="sessionResearchStatus" role="status">در حال خواندن صف پژوهش…</span></div>
+                <p class="session-note">این دکمه درخواست پژوهش را ذخیره می‌کند. اجرای مدل و نتیجهٔ آزمایش باید جداگانه با شواهد ثبت شود؛ طرح پژوهش، دستور فعال‌سازی معاملهٔ خودکار نیست.</p>
+            </section>
             <!-- Dedicated Panel: ناظر هوشمند و گزارش اصلاحات (Research Supervisor & Improvement Journal) -->
             <div class="supervisor-journal-box" aria-live="polite">
                 <div class="broker-actions-bar">
@@ -897,5 +913,6 @@
     </div>
 
     <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/session-workspace.js"></script>
 </body>
 </html>

@@ -835,7 +835,7 @@ class SessionTradingStateMachine:
             {},
         )
 
-    def on_position_opened(self, position_id: str, candle: Candle) -> None:
+    def on_position_opened(self, position_id: str, candle: Candle | MarketQuote) -> None:
         """Transitions state machine to POSITION_MANAGEMENT."""
         if self.active_setup:
             self.active_setup.position_id = position_id
@@ -850,7 +850,7 @@ class SessionTradingStateMachine:
             {},
         )
 
-    def on_position_closed(self, candle: Candle, close_reason: str) -> None:
+    def on_position_closed(self, candle: Candle | MarketQuote, close_reason: str) -> None:
         """Transitions state machine to CLOSED."""
         sessions = self.session_mgr.get_candle_sessions(candle.timestamp)
         sess = sessions[0].value if sessions else "OFF_HOURS"

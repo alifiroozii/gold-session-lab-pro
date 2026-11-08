@@ -207,6 +207,8 @@ class AgentBridge:
                 if table not in tables:
                     return []
                 return [dict(r) for r in conn.execute(sql).fetchall()]
+            session_research = query("session_research_tasks",
+                "SELECT task_id,strategy,timeframe,status,evidence FROM session_research_tasks ORDER BY task_id")
             incidents = query("diagnostics_incidents",
                               "SELECT incident_id,category,severity,title,description,suggested_fix,created_at"
                               " FROM diagnostics_incidents WHERE resolved=0 ORDER BY created_at DESC LIMIT 20")
@@ -226,7 +228,8 @@ class AgentBridge:
                                   " review_status FROM paper_trade_outcomes"
                                   " ORDER BY observed_at DESC LIMIT 30")
         evidence = json.dumps(
-            {"incidents": incidents, "autopsies": autopsies, "hypotheses": hypotheses,
+            {"session_research": session_research, "research_protocol": "docs/SESSION_RESEARCH_PROTOCOL.md",
+             "incidents": incidents, "autopsies": autopsies, "hypotheses": hypotheses,
              "safety_lessons": safety_lessons, "closed_trades": closed_trades,
              "agent_state": {k: v for k, v in state.items() if k != "events"}},
             ensure_ascii=False, indent=2,

@@ -775,3 +775,49 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 .reference-chart-widget .tradingview-widget-container__widget { height: calc(100% - 32px); width: 100%; }
 .tradingview-widget-copyright { font-size: 12px; text-align: center; padding: 6px; }
 @media (max-width: 600px) { .reference-chart-widget { height: 500px !important; } }
+
+.session-workspace, .research-playbook { margin: 0 0 22px; padding: 24px; background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 5px 20px #17203305; }
+.session-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.eyebrow { color: #64748b; font-size: 12px; font-weight: 600; }
+.session-heading h2, .research-playbook h2 { font-size: 22px; color: #172033; margin: 6px 0 10px; }
+.session-heading p, .research-playbook p { color: #64748b; font-size: 13px; line-height: 1.9; }
+#sessionSyncStatus { font-size: 12px; color: #64748b; white-space: nowrap; }
+.session-now-grid { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 10px; margin: 20px 0; }
+.session-now-card { border: 1px solid #e2e8f0; border-top: 3px solid var(--session-color,#94a3b8); background: #f8fafc; border-radius: 12px; padding: 14px 12px; }
+.session-now-card.is-active { background: #eff6ff; border-color: #93c5fd; }
+.session-now-card h3 { font-size: 13px; margin: 0 0 9px; }
+.session-now-card p { font-size: 12px; margin: 6px 0; line-height: 1.7; color: #64748b; }
+.session-state { display: inline-block; padding: 3px 7px; background: #e2e8f0; border-radius: 6px; font-size: 11px; color: #475569; }
+.is-active .session-state { background: #dbeafe; color: #1d4ed8; }
+.session-history { border-top: 1px solid #e2e8f0; padding-top: 16px; }
+.session-history summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.session-history-controls, .research-plan-footer { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 16px 0; }
+.session-history-controls label { font-size: 12px; color: #475569; }
+.session-history-controls select { margin-right: 8px; padding: 7px 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 7px; font: inherit; }
+.session-note { font-size: 12px !important; color: #64748b; line-height: 1.9; margin-top: 16px; }
+.strategy-step-list { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; padding: 0; list-style-position: inside; counter-reset: steps; }
+.strategy-step-list li { list-style: none; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; background: #f8fafc; }
+.strategy-step-list strong { font-size: 13px; display: block; margin-bottom: 8px; }
+.strategy-step-list span { color: #64748b; font-size: 12px; line-height: 1.9; }
+#sessionResearchStatus { color: #64748b; font-size: 13px; }
+@media(max-width:1100px) { .session-now-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .strategy-step-list { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media(max-width:600px) { .session-workspace,.research-playbook { padding: 16px; } .session-now-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .session-heading { flex-direction: column; gap: 5px; } .strategy-step-list { grid-template-columns: 1fr; } .session-heading h2,.research-playbook h2 { font-size: 19px; } }
+@media(max-width:650px) {
+  .main-header { padding: 12px; gap: 12px; }
+  .header-brand, .header-tickers, .header-status { max-width: 100%; min-width: 0; }
+  .header-status, .header-tickers { flex-wrap: wrap; gap: 8px; }
+  .header-tickers { padding: 8px; }
+  .header-brand h1 { font-size: 16px; }
+  .disclaimer-bar { flex-wrap: wrap; gap: 6px; }
+  .disclaimer-content { min-width: 0; }
+  .stats-grid { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 12px; gap: 8px; }
+  .stat-card { min-width: 0; padding: 12px; }
+  .stat-value { overflow-wrap: anywhere; font-size: 19px; }
+  .chart-layout, .chart-side-column { grid-template-columns: minmax(0,1fr); }
+  .chart-side-column, .side-card, .session-workspace, .session-history, .research-playbook, .content-box { min-width: 0; max-width: 100%; }
+  .session-workspace .table-responsive { max-width: 100%; overflow-x: auto; }
+  .verifiable-audit-grid, .research-grid-top, .research-grid-bottom { grid-template-columns: minmax(0,1fr); }
+  .nav-tabs { gap: 4px; padding: 8px; }
+  .nav-btn { padding: 8px; font-size: 12px; }
+  .broker-actions-bar { flex-wrap: wrap; }
+}
