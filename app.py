@@ -9,7 +9,12 @@ diagnostics, learning autopsies, and Champion/Challenger promotion.
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+from decimal import Decimal
 from datetime import datetime, timezone
+
+import httpx
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -71,7 +76,7 @@ engine = ResearchEngine(db_path=DB_PATH)
 market_feed = OandaReadOnlyFeed()
 verified_quote: Optional[MarketQuote] = None
 market_block_reason = "NO_VERIFIED_LIVE_QUOTE"
-engine.market_data_source = "DEMO_CSV"
+engine.market_data_source = "NO_VERIFIED_PROVIDER_DATA"
 broker = PaperBroker(db_path=DB_PATH)
 bot = AutomatedPaperBot(account_id="ACC_DEFAULT", broker=broker, engine=engine, db_path=DB_PATH)
 backtester = BacktestingEngine(db_path=DB_PATH)
@@ -120,7 +125,7 @@ if market_feed.configured:
     except Exception:
         # Credential failures must not convert demo candles to a live quote.
         pass
-if not engine.current_candles and DEMO_CSV.exists():
+if os.getenv("GOLDLAB_ENABLE_DEMO_REPLAY", "0") == "1" and not engine.current_candles and DEMO_CSV.exists():
     try:
         engine.load_from_csv(DEMO_CSV, timeframe="5m")
         engine.market_data_source = "DEMO_CSV"
@@ -152,66 +157,147 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
-# Background live simulator & supervisor task
+# One read-only streaming task plus an independent safety/diagnostics watchdog.
+# No real broker order endpoints are implemented or authorized here.
 background_task: Optional[asyncio.Task] = None
+stream_task: Optional[asyncio.Task] = None
+
+
+async def _broadcast_market_unavailable(reason: str) -> None:
+    await ws_manager.broadcast_json({
+        "type": "MARKET_STATUS", "status": reason, "verified": False,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+
+
+async def oanda_stream_loop() -> None:
+    """Consume OANDA's official account-specific PRICE stream (max 4 updates/s).
+
+    Missing credentials, closed markets, heartbeats, stream disconnects and
+    outdated quotes NEVER trigger synthetic ticks or paper orders.
+    """
+    global verified_quote, market_block_reason
+    delay = 2
+    while True:
+        try:
+            if not market_feed.configured:
+                verified_quote = None
+                market_block_reason = "OANDA_NOT_CONFIGURED"
+                await asyncio.sleep(15)
+                continue
+            headers = {"Authorization": "Bearer " + market_feed.token,
+                       "Accept": "application/json"}
+            timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+                async with client.stream("GET", market_feed.stream_url,
+                                         headers=headers) as response:
+                    response.raise_for_status()
+                    delay = 2
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            packet = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if packet.get("type") != "PRICE":
+                            # A HEARTBEAT is connection health, NOT a fresh quote.
+                            continue
+                        try:
+                            quote = market_feed.quote_from_price(packet)
+                        except (ValueError, KeyError, TypeError):
+                            verified_quote = None
+                            market_block_reason = "INVALID_PROVIDER_PRICE"
+                            await _broadcast_market_unavailable(market_block_reason)
+                            continue
+                        ok, reason = execution_gate(quote)
+                        verified_quote = quote if ok else None
+                        market_block_reason = reason
+                        if not ok:
+                            await _broadcast_market_unavailable(reason)
+                            continue
+                        # A verified quote can update the local PAPER broker only.
+                        broker.on_tick(quote.bid, quote.ask, timestamp=quote.timestamp)
+                        await ws_manager.broadcast_json({
+                            "type": "TICK", "bid": quote.bid, "ask": quote.ask,
+                            "bid_display": quote.bid_display,
+                            "ask_display": quote.ask_display,
+                            "timestamp": quote.timestamp.isoformat(),
+                            "source": quote.source, "verified": True,
+                        })
+            # A normal EOF is a disconnection, not a successful live feed.
+            verified_quote = None
+            market_block_reason = "LIVE_STREAM_DISCONNECTED"
+            await _broadcast_market_unavailable(market_block_reason)
+        except asyncio.CancelledError:
+            verified_quote = None
+            raise
+        except (httpx.HTTPError, OSError, RuntimeError) as error:
+            verified_quote = None
+            market_block_reason = "LIVE_STREAM_UNAVAILABLE"
+            # Avoid logging token, URL with credentials, or sensitive headers.
+            diagnostics.categorize_exception(
+                RuntimeError(type(error).__name__),
+                {"source": "oanda_stream", "error_type": type(error).__name__},
+            )
+            await _broadcast_market_unavailable(market_block_reason)
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 30)
 
 
 async def market_heartbeat_loop() -> None:
-    """Poll verified read-only OANDA prices; never replay old/demo data as live ticks."""
+    """Enforce quote TTL, refresh provider candles and publish real incidents."""
     global verified_quote, market_block_reason
     counter = 0
     while True:
         try:
             await asyncio.sleep(5.0)
             counter += 1
-            new_quote = None
-            if market_feed.configured:
-                try:
-                    new_quote = await asyncio.to_thread(market_feed.latest_quote)
-                except Exception:
-                    market_block_reason = "LIVE_FEED_UNAVAILABLE"
-            ok, reason = execution_gate(new_quote)
-            verified_quote = new_quote if ok else None
-            market_block_reason = reason if new_quote is not None else (
-                "LIVE_FEED_UNAVAILABLE" if market_feed.configured else "OANDA_NOT_CONFIGURED"
-            )
-            if verified_quote is not None:
-                broker.on_tick(verified_quote.bid, verified_quote.ask,
-                               timestamp=verified_quote.timestamp)
-                # Refresh actual historical candles separately from authenticated quotes.
-                if counter % 12 == 0:
-                    try:
-                        bars = await asyncio.to_thread(market_feed.historical_m1)
-                        if bars:
-                            engine.load_candles(bars, timeframe=engine.current_timeframe)
-                            engine.market_data_source = "OANDA_HISTORICAL_MID"
-                            engine.run_pipeline()
-                    except Exception:
-                        pass
-                await ws_manager.broadcast_json({
-                    "type": "TICK", "bid": verified_quote.bid, "ask": verified_quote.ask,
-                    "source": verified_quote.source,
-                    "timestamp": verified_quote.timestamp.isoformat(),
-                    "verified": True,
-                })
-            else:
-                # Closed market or unavailable source: do NOT send synthetic ticks.
+            ok, reason = execution_gate(verified_quote)
+            if not ok:
+                verified_quote = None
+                market_block_reason = (
+                    reason if market_feed.configured else "OANDA_NOT_CONFIGURED"
+                )
                 if bot.state == BotState.PAPER_AUTO:
                     bot.set_state(BotState.DATA_DISCONNECTED)
-                await ws_manager.broadcast_json({
-                    "type": "MARKET_STATUS", "status": market_block_reason,
-                    "verified": False,
-                    "timestamp": datetime.now(TZ_UTC).isoformat(),
-                })
+                await _broadcast_market_unavailable(market_block_reason)
+            if market_feed.configured and (counter == 1 or counter % 12 == 0):
+                try:
+                    bars = await asyncio.to_thread(market_feed.historical_m1)
+                    if bars:
+                        engine.load_candles(bars, timeframe=engine.current_timeframe)
+                        engine.market_data_source = "OANDA_HISTORICAL_MID"
+                        engine.run_pipeline()
+                        await ws_manager.broadcast_json({
+                            "type": "CANDLES_UPDATED", "source": "OANDA_HISTORICAL_MID",
+                            "timestamp": bars[-1].timestamp.isoformat(),
+                        })
+                except Exception:
+                    # Leave previously verified historical candles in place;
+                    # never substitute demo CSV or extrapolated candle prices.
+                    pass
             if counter % 6 == 0:
                 supervisor.run_health_loop(broker)
                 guardian.audit_ledger_invariance("ACC_DEFAULT", broker)
+            # Local deterministic observer; only collects evidence. External
+            # Antigravity still requires a supported, explicit task runner.
+            observed = await asyncio.to_thread(agent_bridge.observe_local_issues)
+            if observed:
+                await asyncio.to_thread(agent_bridge.write_handoff)
+                await ws_manager.broadcast_json({
+                    "type": "AGENT_OBSERVATIONS", "count": observed,
+                    "timestamp": datetime.now(TZ_UTC).isoformat(),
+                })
         except asyncio.CancelledError:
             break
-        except Exception as e:
+        except Exception as error:
             verified_quote = None
-            market_block_reason = "LIVE_FEED_ERROR"
-            diagnostics.categorize_exception(e, {"source": "market_heartbeat_loop"})
+            market_block_reason = "MARKET_WATCHDOG_ERROR"
+            diagnostics.categorize_exception(
+                RuntimeError(type(error).__name__),
+                {"source": "market_heartbeat_loop"},
+            )
 
 
 @app.on_event("startup")
@@ -220,13 +306,17 @@ async def startup_event() -> None:
     # Ensure research hypotheses and baseline champion are seeded
     supervisor.run_research_cycle()
     background_task = asyncio.create_task(market_heartbeat_loop())
+    global stream_task
+    stream_task = asyncio.create_task(oanda_stream_loop())
 
 
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
-    global background_task
+    global background_task, stream_task
     if background_task:
         background_task.cancel()
+    if stream_task:
+        stream_task.cancel()
 
 
 def get_execution_status() -> Dict[str, Any]:
@@ -240,6 +330,14 @@ def get_execution_status() -> Dict[str, Any]:
         "quote_time": verified_quote.timestamp.isoformat() if verified_quote else None,
         "bid": verified_quote.bid if verified_quote else None,
         "ask": verified_quote.ask if verified_quote else None,
+        "bid_display": verified_quote.bid_display if verified_quote else None,
+        "ask_display": verified_quote.ask_display if verified_quote else None,
+        "spread_display": (
+            format(Decimal(verified_quote.ask_display)
+                   - Decimal(verified_quote.bid_display), "f")
+            if verified_quote and verified_quote.bid_display
+            and verified_quote.ask_display else None
+        ),
         "chart_source": engine.market_data_source,
         "provider_configured": market_feed.configured,
         "historical_data_is_executable": False,
