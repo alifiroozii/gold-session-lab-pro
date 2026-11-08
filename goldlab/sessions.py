@@ -257,9 +257,14 @@ class SessionManager:
         from collections import defaultdict
 
         definitions = [
-            ("asia", SessionName.TOKYO, TZ_TOKYO, self.config.tokyo_start, self.config.tokyo_end),
-            ("london", SessionName.LONDON, TZ_LONDON, self.config.london_start, self.config.london_end),
-            ("new_york", SessionName.NEW_YORK, TZ_NEW_YORK, self.config.ny_start, self.config.ny_end),
+            # The chart's 'Asia' zone is specifically the 20:00–00:00 NY
+            # research range used by the strategy, NOT the Tokyo session.
+            ("asia", SessionName.ASIA_REFERENCE, TZ_NEW_YORK,
+             self.config.asia_ref_ny_start, self.config.asia_ref_ny_end),
+            ("london", SessionName.LONDON, TZ_LONDON,
+             self.config.london_start, self.config.london_end),
+            ("new_york", SessionName.NEW_YORK, TZ_NEW_YORK,
+             self.config.ny_start, self.config.ny_end),
         ]
         grouped: Dict[tuple, List[Candle]] = defaultdict(list)
         for candle in candles:
@@ -282,8 +287,13 @@ class SessionManager:
             else:
                 definition = next(d for d in definitions if d[0] == name)
                 _, _enum, zone, local_start, local_end = definition
-                start_utc = datetime.combine(session_date, local_start, zone).astimezone(TZ_UTC)
-                end_utc = datetime.combine(session_date, local_end, zone).astimezone(TZ_UTC)
+                start_local = datetime.combine(session_date, local_start, zone)
+                # Cross-midnight Asia range: local end belongs to next day.
+                end_date = (session_date + timedelta(days=1)
+                            if local_end <= local_start else session_date)
+                end_local = datetime.combine(end_date, local_end, zone)
+                start_utc = start_local.astimezone(TZ_UTC)
+                end_utc = end_local.astimezone(TZ_UTC)
             if end_utc <= start_utc:
                 continue
             high, low = max(bar.high for bar in bars), min(bar.low for bar in bars)
