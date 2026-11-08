@@ -67,3 +67,31 @@ def test_pull_hook_requires_explicit_local_install() -> None:
     assert "post-merge" in installer and "post-rewrite" in installer
     assert "Refusing to overwrite existing hook" in installer
     assert "run once" in installer.lower() or "Run once" in installer
+
+
+
+def test_chart_requires_real_feed_without_hidden_demo_fallback() -> None:
+    js = (ROOT / "static/js/dashboard.js").read_text(encoding="utf-8")
+    html = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+    handler = js.split("async function fetchMarketData()", 1)[1].split(
+        "function renderMarketData(", 1
+    )[0]
+    assert "/api/market/load-demo" not in handler
+    assert 'id="chartEmptyState"' in html
+    assert 'lastQuoteTime' in html
+    assert "chartHasFittedOnce" in js
+    assert "setVisibleLogicalRange" in js
+    assert "currentMarketData?.data_source" in js
+
+
+def test_synthetic_replay_cannot_authorize_market_order(monkeypatch) -> None:
+    from app import app, engine
+    from fastapi.testclient import TestClient
+    with monkeypatch.context() as context:
+        context.setattr(engine, "market_data_source", "DEMO_CSV")
+        res = TestClient(app).post("/api/broker/order", json={
+            "direction": "BUY", "order_type": "MARKET",
+            "quantity_lots": 0.01,
+        })
+    assert res.status_code == 409
+    assert "synthetic chart" in res.json()["detail"]
