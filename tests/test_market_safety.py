@@ -73,7 +73,9 @@ def test_session_boxes_have_true_window_and_price_extremes():
     assert len(asia) == 1
     assert asia[0]["high"] == pytest.approx(3004.0)
     assert asia[0]["low"] == pytest.approx(2997.0)
-    assert asia[0]["start"] == int(datetime(2026,11,4,0,0,tzinfo=UTC).timestamp())
+    # Session chart Asia now means the actual configured 20:00–00:00 NY
+    # research range, which starts at 01:00 UTC on Nov 4 (EST).
+    assert asia[0]["start"] == int(datetime(2026,11,4,1,0,tzinfo=UTC).timestamp())
     assert any(b["session"] == "overlap" for b in boxes)
 
 
