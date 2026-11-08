@@ -67,6 +67,13 @@ def test_calendar_endpoint() -> None:
 
 def test_strategy_comparison_endpoint() -> None:
     res = client.get("/api/backtest/compare")
-    assert res.status_code == 200
-    results = res.json()["results"]
-    assert len(results) == 8  # S1 to S8
+    if res.status_code == 400:
+        # No authenticated real history is configured in CI.
+        # Refusing to present fabricated comparisons is the correct behavior.
+        market = client.get("/api/market").json()
+        assert market["data_source"] == "NO_VERIFIED_PROVIDER_DATA"
+        assert not market["candles"]
+    else:
+        assert res.status_code == 200
+        results = res.json()["results"]
+        assert len(results) == 8  # S1 to S8
