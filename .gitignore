@@ -19,3 +19,4 @@ output/
 *.sqlite-shm
 *.pid
 data/server.log
+agent-work/

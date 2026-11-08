@@ -77,3 +77,17 @@ def test_strategy_comparison_endpoint() -> None:
         assert res.status_code == 200
         results = res.json()["results"]
         assert len(results) == 8  # S1 to S8
+
+
+def test_tradingview_quote_endpoint() -> None:
+    res = client.get("/api/tradingview/quote")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] in ("SUCCESS", "UNAVAILABLE")
+    if data["status"] == "SUCCESS":
+        q = data["quote"]
+        assert q["symbol"] == "XAU/USD"
+        assert q["price"] > 0
+        assert q["bid"] > 0
+        assert q["ask"] >= q["bid"]
+        assert "source" in q

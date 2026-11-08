@@ -306,6 +306,18 @@ async def market_heartbeat_loop() -> None:
                 if bot.state == BotState.PAPER_AUTO:
                     bot.set_state(BotState.DATA_DISCONNECTED)
                 await _broadcast_market_unavailable(market_block_reason)
+
+            # Broadcast live TradingView price for real-time dashboard updates
+            try:
+                tv_quote = await fetch_tradingview_quote_async()
+                if tv_quote:
+                    await ws_manager.broadcast_json({
+                        "type": "TRADINGVIEW_TICK",
+                        "quote": tv_quote,
+                    })
+            except Exception:
+                pass
+
             if market_feed.configured and (counter == 1 or counter % 12 == 0):
                 try:
                     bars = await asyncio.to_thread(market_feed.historical_m1)
@@ -424,6 +436,64 @@ def get_execution_status() -> Dict[str, Any]:
 @app.get("/api/market/status")
 async def get_market_status() -> Dict[str, Any]:
     return get_execution_status()
+
+
+async def fetch_tradingview_quote_async() -> Optional[Dict[str, Any]]:
+    """Fetch live real-time quote for XAUUSD directly from TradingView CFD scanner."""
+    try:
+        url = "https://scanner.tradingview.com/cfd/scan"
+        payload = {
+            "symbols": {"tickers": ["OANDA:XAUUSD"]},
+            "columns": ["close", "bid", "ask", "high", "low", "open", "change", "change_abs", "volume", "time"]
+        }
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            res = await client.post(
+                url,
+                json=payload,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Content-Type": "application/json",
+                },
+            )
+            if res.status_code != 200:
+                return None
+            data = res.json()
+            rows = data.get("data", [])
+            if not rows:
+                return None
+            d = rows[0].get("d", [])
+            if len(d) < 10:
+                return None
+            bid = float(d[1]) if d[1] is not None else float(d[0])
+            ask = float(d[2]) if d[2] is not None else float(d[0])
+            spread = round(ask - bid, 2)
+            return {
+                "symbol": "XAU/USD",
+                "ticker": "OANDA:XAUUSD",
+                "price": round(float(d[0]), 2),
+                "bid": round(bid, 2),
+                "ask": round(ask, 2),
+                "spread": spread,
+                "high": round(float(d[3]), 2),
+                "low": round(float(d[4]), 2),
+                "open": round(float(d[5]), 2),
+                "change_pct": round(float(d[6]), 3),
+                "change_abs": round(float(d[7]), 3),
+                "volume": int(d[8]) if d[8] is not None else 0,
+                "timestamp": d[9],
+                "time_iso": datetime.now(timezone.utc).isoformat(),
+                "source": "TRADINGVIEW_LIVE",
+            }
+    except Exception:
+        return None
+
+
+@app.get("/api/tradingview/quote")
+async def get_tradingview_quote() -> Dict[str, Any]:
+    quote = await fetch_tradingview_quote_async()
+    if quote:
+        return {"status": "SUCCESS", "quote": quote}
+    return {"status": "UNAVAILABLE", "message": "TradingView live quote temporarily unavailable"}
 
 
 # --- Pydantic Request Models ---

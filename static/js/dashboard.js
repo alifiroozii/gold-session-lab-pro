@@ -12,6 +12,108 @@ let currentMarketData = null;
 let activePriceLines = [];
 let sessionRectangles = [];
 let liveQuoteLine = null;
+let currentChartMode = "TV_LIVE";
+
+// --- مدیریت تغییر حالت نمایش چارت (تریدینگ‌ویو زنده / سشن‌های تحلیلی / نمای مقایسه همزمان) ---
+window.switchChartMode = function(mode) {
+    currentChartMode = mode;
+    const btnTv = document.getElementById("btnModeTvLive");
+    const btnSession = document.getElementById("btnModeSessionLab");
+    const btnSplit = document.getElementById("btnModeSplit");
+    const tvContainer = document.getElementById("tvChartContainer");
+    const sessionContainer = document.getElementById("sessionLabContainer");
+    const wrapper = document.getElementById("chartsViewWrapper");
+    const sessionControls = document.getElementById("sessionControlsGroup");
+    const footnote = document.getElementById("chartFootnote");
+
+    [btnTv, btnSession, btnSplit].forEach(b => b?.classList.remove("active"));
+
+    if (mode === "TV_LIVE") {
+        btnTv?.classList.add("active");
+        if (tvContainer) tvContainer.style.display = "block";
+        if (sessionContainer) sessionContainer.style.display = "none";
+        if (sessionControls) sessionControls.style.display = "none";
+        wrapper?.classList.remove("split-mode");
+        if (footnote) {
+            footnote.textContent = "🟢 چارت زنده تریدینگ‌ویو: دریافت بی‌درنگ کندل‌ها و قیمت‌های زنده XAU/USD (OANDA:XAUUSD) مستقیماً از تریدینگ‌ویو بدون وقفه.";
+        }
+    } else if (mode === "SESSION_LAB") {
+        btnSession?.classList.add("active");
+        if (tvContainer) tvContainer.style.display = "none";
+        if (sessionContainer) sessionContainer.style.display = "block";
+        if (sessionControls) sessionControls.style.display = "flex";
+        wrapper?.classList.remove("split-mode");
+        if (footnote) {
+            footnote.textContent = "مستطیل‌ها: محدوده قیمت هر سشن • خطوط بالایی و پایینی: سقف و کف • هم‌پوشانی لندن/نیویورک: بنفش • معاملات خودکار فعلاً غیرفعال";
+        }
+        resizeSessionChart();
+    } else if (mode === "SPLIT") {
+        btnSplit?.classList.add("active");
+        if (tvContainer) tvContainer.style.display = "block";
+        if (sessionContainer) sessionContainer.style.display = "block";
+        if (sessionControls) sessionControls.style.display = "flex";
+        wrapper?.classList.add("split-mode");
+        if (footnote) {
+            footnote.textContent = "📊 نمای همزمان (Split View): مقایسه زنده چارت تریدینگ‌ویو در کنار سطوح سشن‌های آسیا، لندن، نیویورک و ستاپ‌های استراتژی.";
+        }
+        resizeSessionChart();
+    }
+};
+
+function resizeSessionChart() {
+    requestAnimationFrame(() => {
+        const container = document.getElementById("chartContainer");
+        if (chart && container) {
+            const w = container.clientWidth || 600;
+            chart.applyOptions({ width: w, height: 560 });
+            chart.timeScale().fitContent();
+            drawSessionBoxes();
+        }
+    });
+}
+
+// --- دریافت و اعمال قیمت زنده تریدینگ‌ویو برای اعداد داشبورد و چارت ---
+async function fetchTradingViewQuote() {
+    try {
+        const res = await fetch("/api/tradingview/quote");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === "SUCCESS" && data.quote) {
+            handleTradingViewQuote(data.quote);
+        }
+    } catch (_err) {}
+}
+
+function handleTradingViewQuote(quote) {
+    if (!quote || !quote.price) return;
+
+    // 1. به‌روزرسانی قیمت لحظه‌ای تریدینگ‌ویو در هدر
+    const tvPriceEl = document.getElementById("tvLivePrice");
+    if (tvPriceEl) {
+        const prevPrice = parseFloat(tvPriceEl.dataset.prevPrice || quote.price);
+        tvPriceEl.textContent = "$" + quote.price.toFixed(2);
+        if (quote.price > prevPrice) {
+            tvPriceEl.className = "ticker-val text-green font-weight-bold";
+        } else if (quote.price < prevPrice) {
+            tvPriceEl.className = "ticker-val text-red font-weight-bold";
+        }
+        tvPriceEl.dataset.prevPrice = quote.price;
+    }
+
+    // 2. در صورت نبود کوت مستقیم بروکر، اعداد Bid/Ask/Spread هدر از تریدینگ‌ویو تغذیه می‌شوند
+    const quoteBidEl = document.getElementById("quoteBid");
+    const quoteAskEl = document.getElementById("quoteAsk");
+    const quoteSpreadEl = document.getElementById("quoteSpread");
+    if (quoteBidEl && (quoteBidEl.textContent === "—" || quoteBidEl.dataset.source === "tv")) {
+        quoteBidEl.textContent = quote.bid.toFixed(2);
+        quoteBidEl.dataset.source = "tv";
+        if (quoteAskEl) quoteAskEl.textContent = quote.ask.toFixed(2);
+        if (quoteSpreadEl) quoteSpreadEl.textContent = quote.spread.toFixed(2);
+    }
+
+    // 3. ترسیم خط قیمت زنده تریدینگ‌ویو روی چارت سشن‌ها
+    updateLiveQuoteLine(quote.bid, quote.ask, "قیمت زنده TV: $" + quote.price.toFixed(2));
+}
 
 // --- تابع جامع تبدیل تاریخ میلادی به تاریخ خورشیدی شمسی (Jalali / Solar Hijri) ---
 function toShamsiDateTime(dateInput, includeTime = true) {
@@ -47,9 +149,11 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchBrokerData();
     fetchCalendarData();
     fetchBotData();
+    fetchTradingViewQuote();
     initWebSocket();
     setInterval(fetchBrokerData, 3000);
     setInterval(fetchBotData, 4000);
+    setInterval(fetchTradingViewQuote, 3000);
     setInterval(fetchMarketStatus, 5000);
     fetchMarketStatus();
 });
@@ -395,18 +499,19 @@ function removeLiveQuoteLine() {
     liveQuoteLine = null;
 }
 
-function updateLiveQuoteLine(bid, ask) {
-    if (!candleSeries || !currentMarketData ||
-        currentMarketData.data_source !== "OANDA_HISTORICAL_MID") return;
+function updateLiveQuoteLine(bid, ask, title = "قیمت لحظه‌ای (نقل‌قول)") {
+    if (!candleSeries) return;
     if (!Number.isFinite(bid) || !Number.isFinite(ask) || ask <= bid) return;
     const mid = (bid + ask) / 2;
     if (!liveQuoteLine) {
         liveQuoteLine = candleSeries.createPriceLine({
             price: mid, color: "#16A34A", lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Dotted,
-            axisLabelVisible: true, title: "OANDA Mid لحظه‌ای (نقل‌قول)",
+            axisLabelVisible: true, title: title,
         });
-    } else liveQuoteLine.applyOptions({price: mid});
+    } else {
+        liveQuoteLine.applyOptions({price: mid, title: title});
+    }
 }
 
 function updateExecutionBadge(execution) {
@@ -875,6 +980,8 @@ function initWebSocket() {
                     bid_display: msg.bid_display, ask_display: msg.ask_display,
                 });
                 updateLiveQuoteLine(Number(msg.bid), Number(msg.ask));
+            } else if (msg.type === "TRADINGVIEW_TICK" && msg.quote) {
+                handleTradingViewQuote(msg.quote);
             } else if (msg.type === "MARKET_STATUS") {
                 updateExecutionBadge({
                     paper_orders_allowed: false,

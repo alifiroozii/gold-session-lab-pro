@@ -39,6 +39,10 @@
                 <span class="ticker-val highlight-gold">XAU/USD</span>
             </div>
             <div class="ticker-box">
+                <span class="ticker-label">قیمت زنده TV:</span>
+                <span class="ticker-val highlight-gold" id="tvLivePrice">—</span>
+            </div>
+            <div class="ticker-box">
                 <span class="ticker-label">Bid:</span>
                 <span class="ticker-val" id="quoteBid">—</span>
             </div>
@@ -49,6 +53,21 @@
             <div class="ticker-box">
                 <span class="ticker-label">اسپرد:</span>
                 <span class="ticker-val" id="quoteSpread">—</span>
+            </div>
+            <!-- TradingView Streaming Single Ticker Widget -->
+            <div class="tv-ticker-wrapper" style="display:inline-flex; align-items:center;">
+                <div class="tradingview-widget-container" style="width: 140px; height: 32px; overflow: hidden;">
+                    <div class="tradingview-widget-container__widget"></div>
+                    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-ticker.js" async>
+                    {
+                      "symbol": "OANDA:XAUUSD",
+                      "width": 140,
+                      "colorTheme": "light",
+                      "isTransparent": true,
+                      "locale": "fa_IR"
+                    }
+                    </script>
+                </div>
             </div>
         </div>
 
@@ -139,30 +158,77 @@
             <div class="chart-layout">
                 <div class="chart-main-column">
                     <div class="chart-toolbar">
-                        <div class="timeframe-selector">
-                            <button class="tf-btn" data-tf="1m">1m</button>
-                            <button class="tf-btn active" data-tf="5m">5m</button>
-                            <button class="tf-btn" data-tf="15m">15m</button>
-                            <button class="tf-btn" data-tf="1h">1h</button>
+                        <!-- Chart Mode Switcher -->
+                        <div class="chart-mode-selector">
+                            <button type="button" class="mode-btn active" id="btnModeTvLive" onclick="switchChartMode('TV_LIVE')">
+                                <span class="live-pulse"></span> 🟢 چارت زنده تریدینگ‌ویو (TradingView Live)
+                            </button>
+                            <button type="button" class="mode-btn" id="btnModeSessionLab" onclick="switchChartMode('SESSION_LAB')">
+                                🔬 چارت تحلیلی سشن‌ها (Session Lab Pro)
+                            </button>
+                            <button type="button" class="mode-btn" id="btnModeSplit" onclick="switchChartMode('SPLIT')">
+                                📊 نمای همزمان (Split View)
+                            </button>
                         </div>
-                        <div class="layer-toggles">
-                            <label><input type="checkbox" id="toggleSessions" checked> محدوده سشن‌ها (امروز و روزهای قبل)</label>
-                            <label><input type="checkbox" id="toggleLevels"> خطوط سقف/کف</label>
-                            <label><input type="checkbox" id="toggleTrades"> معاملات بک‌تست (نه معاملات اجراشده)</label>
-                            <label><input type="checkbox" id="toggleSignals"> سیگنال‌های ستاپ (اختیاری)</label>
-                        </div>
-                        <div class="replay-controls">
-                            <button class="btn btn-secondary btn-sm" id="btnReplayPrev">⏮ کندل قبل</button>
-                            <button class="btn btn-primary btn-sm" id="btnReplayPlay">▶ بازپخش (Replay)</button>
-                            <button class="btn btn-secondary btn-sm" id="btnReplayNext">کندل بعد ⏭</button>
+
+                        <!-- Session Lab Controls (Visible in Session Lab & Split Modes) -->
+                        <div class="session-controls-group" id="sessionControlsGroup" style="display: none;">
+                            <div class="timeframe-selector">
+                                <button class="tf-btn" data-tf="1m">1m</button>
+                                <button class="tf-btn active" data-tf="5m">5m</button>
+                                <button class="tf-btn" data-tf="15m">15m</button>
+                                <button class="tf-btn" data-tf="1h">1h</button>
+                            </div>
+                            <div class="layer-toggles">
+                                <label><input type="checkbox" id="toggleSessions" checked> محدوده سشن‌ها</label>
+                                <label><input type="checkbox" id="toggleLevels"> خطوط سقف/کف</label>
+                                <label><input type="checkbox" id="toggleTrades"> معاملات بک‌تست</label>
+                                <label><input type="checkbox" id="toggleSignals"> سیگنال‌ها</label>
+                            </div>
+                            <div class="replay-controls">
+                                <button class="btn btn-secondary btn-sm" id="btnReplayPrev">⏮ کندل قبل</button>
+                                <button class="btn btn-primary btn-sm" id="btnReplayPlay">▶ بازپخش</button>
+                                <button class="btn btn-secondary btn-sm" id="btnReplayNext">کندل بعد ⏭</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Chart Container -->
-                    <div id="chartContainer" class="chart-viewport">
-                        <div id="sessionOverlay" class="session-overlay" aria-hidden="true"></div>
+                    <!-- Charts Viewport Wrapper (Single or Split Mode) -->
+                    <div id="chartsViewWrapper" class="charts-view-wrapper mode-tv-live">
+                        <!-- 1. TradingView Live Advanced Real-Time Chart Viewport -->
+                        <div id="tvChartContainer" class="chart-viewport tv-chart-viewport">
+                            <div class="tradingview-widget-container" style="height:100%;width:100%">
+                                <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+                                <div class="tradingview-widget-copyright">
+                                    <a href="https://fa.tradingview.com/" rel="noopener nofollow" target="_blank"><span class="blue-text">مشاهده چارت طلا در تریدینگ‌ویو (TradingView)</span></a>
+                                </div>
+                                <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+                                {
+                                  "autosize": true,
+                                  "symbol": "OANDA:XAUUSD",
+                                  "interval": "5",
+                                  "timezone": "Asia/Tehran",
+                                  "theme": "light",
+                                  "style": "1",
+                                  "locale": "fa_IR",
+                                  "enable_publishing": false,
+                                  "allow_symbol_change": true,
+                                  "calendar": false,
+                                  "support_host": "https://www.tradingview.com"
+                                }
+                                </script>
+                            </div>
+                        </div>
+
+                        <!-- 2. Session Lab Lightweight Charts Viewport -->
+                        <div id="sessionLabContainer" class="chart-viewport session-chart-viewport" style="display: none;">
+                            <div id="chartContainer" class="chart-inner-canvas">
+                                <div id="sessionOverlay" class="session-overlay" aria-hidden="true"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="chart-footnote">مستطیل‌ها: محدوده قیمت هر سشن • خطوط بالایی و پایینی: سقف و کف • هم‌پوشانی لندن/نیویورک: بنفش • معاملات خودکار فعلاً غیرفعال</div>
+
+                    <div class="chart-footnote" id="chartFootnote">🟢 چارت زنده تریدینگ‌ویو: دریافت بی‌درنگ کندل‌ها و قیمت‌های زنده XAU/USD (OANDA:XAUUSD) مستقیماً از تریدینگ‌ویو بدون وقفه.</div>
 
                     <!-- Chart Level Indicators -->
                     <div class="session-levels-bar">
