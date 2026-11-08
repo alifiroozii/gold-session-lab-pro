@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from goldlab.agent_bridge import AgentBridge
 from goldlab.autofix import SafeAutoFixEngine
 from goldlab.backtester import BacktestingEngine
 from goldlab.bot import AutomatedPaperBot, BotState
@@ -80,6 +81,7 @@ guardian = IndependentRiskGuardian(db_path=DB_PATH)
 regime_monitor = MarketRegimeMonitor()
 diagnostics = DiagnosticsEngine(db_path=DB_PATH)
 autofix = SafeAutoFixEngine(db_path=DB_PATH)
+agent_bridge = AgentBridge(db_path=DB_PATH)
 learning = MistakeAnalyzerAndHypothesisRegistry(db_path=DB_PATH)
 ml_model = MLTradeQualityModel(db_path=DB_PATH, shadow_mode=True)
 promotion = ChampionChallengerManager(db_path=DB_PATH)
@@ -616,6 +618,12 @@ async def get_calendar_events() -> Dict[str, Any]:
     return {"events": events_data}
 
 
+# --- Antigravity transparent bridge (no invented live agent) ---
+@app.get("/api/agent/status")
+async def get_agent_status() -> Dict[str, Any]:
+    return agent_bridge.state()
+
+
 # --- AI Research Supervisor Endpoints ---
 
 @app.get("/api/supervisor/status")
@@ -624,7 +632,8 @@ async def get_supervisor_status() -> Dict[str, Any]:
     champ = promotion.get_current_champion()
     recent_jobs = supervisor.list_jobs(limit=10)
     return {
-        "status": "OPERATIONAL",
+        "status": "LOCAL_SUPERVISOR_ONLY",
+        "antigravity": agent_bridge.state()["agent_status"],
         "champion": {
             "name": champ.name if champ else "None",
             "expectancy_r": champ.expectancy_r if champ else 0.0,
