@@ -45,8 +45,12 @@ def test_market_closure_weekend() -> None:
     sun_pre = datetime(2026, 11, 8, 20, 0, tzinfo=TZ_UTC)
     assert mgr.is_market_closed(sun_pre) is True
 
-    # Sunday 22:30 UTC (Open)
-    sun_open = datetime(2026, 11, 8, 22, 30, tzinfo=TZ_UTC)
+    # On Nov 8 NY is on EST (UTC-5); Sunday 22:30 UTC is only
+    # 17:30 New York, BEFORE the 18:00 local market reopening.
+    sun_pre_open = datetime(2026, 11, 8, 22, 30, tzinfo=TZ_UTC)
+    assert mgr.is_market_closed(sun_pre_open) is True
+
+    sun_open = datetime(2026, 11, 8, 23, 30, tzinfo=TZ_UTC)
     assert mgr.is_market_closed(sun_open) is False
 
     # Tuesday 10:00 UTC (Open)
