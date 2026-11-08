@@ -96,11 +96,17 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchCalendarData();
     fetchBotData();
     fetchTradingViewQuote();
+    fetchMarketComparison();
+    fetchStrategyState();
+    fetchSupervisorReport();
     initWebSocket();
     setInterval(fetchBrokerData, 3000);
     setInterval(fetchBotData, 4000);
     setInterval(fetchTradingViewQuote, 3000);
     setInterval(fetchMarketStatus, 5000);
+    setInterval(fetchMarketComparison, 5000);
+    setInterval(fetchStrategyState, 4000);
+    setInterval(fetchSupervisorReport, 8000);
     fetchMarketStatus();
 });
 
@@ -591,6 +597,12 @@ async function fetchBrokerData() {
 
         document.getElementById("accBalance").innerText = `$${acc.balance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         document.getElementById("accEquity").innerText = `$${acc.equity.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        if (document.getElementById("sideAccBalance")) {
+            document.getElementById("sideAccBalance").innerText = `$${acc.balance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        }
+        if (document.getElementById("sideAccEquity")) {
+            document.getElementById("sideAccEquity").innerText = `$${acc.equity.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        }
         document.getElementById("accFloatingSub").innerText = `سود/زیان شناور: $${acc.unrealized_pnl.toFixed(2)}`;
         document.getElementById("accFreeMargin").innerText = `$${acc.margin_free.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
         document.getElementById("accMarginLevel").innerText = `سطح مارجین: ${acc.margin_level_pct}%`;
@@ -783,7 +795,7 @@ function initForms() {
     });
 
     document.getElementById("btnModalReset")?.addEventListener("click", async () => {
-        if (!confirm("آیا از ریست کامل حساب مجازی و تنظیم موجودی روی $۱۰,۰۰۰ اطمینان دارید؟")) return;
+        if (!confirm("آیا از ریست کامل حساب مجازی و تنظیم موجودی روی $۱,۰۰۰ اطمینان دارید؟")) return;
         await fetch("/api/broker/reset", { method: "POST" });
         fetchBrokerData();
     });
@@ -1497,4 +1509,128 @@ function renderSensitivityMatrix() {
             هیچ آزمون حساسیت پارامترها با داده واقعی و نتایج خارج از نمونه تأیید نشده است.
             اعداد قبلی صرفاً نمایشی بودند و حذف شدند.
         </div>`;
+}
+
+
+// ========================================================
+// 16. Layer C Market Comparison & Causal State Machine API
+// ========================================================
+
+async function fetchMarketComparison() {
+    const tableBody = document.querySelector("#marketComparisonTable tbody");
+    if (!tableBody) return;
+    try {
+        const res = await fetch("/api/market/comparison", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.layers && data.layers.length > 0) {
+            tableBody.innerHTML = data.layers.map(l => `
+                <tr>
+                    <td><strong>${safeText(l.source_layer)}</strong></td>
+                    <td><code>${safeText(l.symbol)}</code></td>
+                    <td>${safeText(l.provider_name)}</td>
+                    <td>${safeText(l.data_type)}</td>
+                    <td>${l.last_quote_time ? safeText(toShamsiDateTime(l.last_quote_time)) : "—"}</td>
+                    <td class="text-green">${l.bid !== null ? formatGoldPrice(l.bid) : "—"}</td>
+                    <td class="text-red">${l.ask !== null ? formatGoldPrice(l.ask) : "—"}</td>
+                    <td>${l.mid !== null ? formatGoldPrice(l.mid) : "—"}</td>
+                    <td>${l.spread !== null ? `$${l.spread.toFixed(2)}` : "—"}</td>
+                    <td><small>${safeText(l.latency_estimate)}</small></td>
+                    <td><span class="badge ${l.is_executable ? 'badge-pd' : 'badge-asia'}">${safeText(l.quote_validity)}</span></td>
+                    <td>${l.is_executable ? '<span class="text-green">✓ مجاز</span>' : '<span class="text-red">✗ غیرمجاز</span>'}</td>
+                    <td><small class="text-muted">${safeText(l.notes)}</small></td>
+                </tr>
+            `).join("");
+        }
+
+        const deltaAmountEl = document.getElementById("priceDeltaAmount");
+        const deltaNoteEl = document.getElementById("priceDeltaExplanation");
+        if (deltaAmountEl && data.price_delta) {
+            if (data.price_delta.difference_usd !== null && data.price_delta.difference_usd !== undefined) {
+                const diff = data.price_delta.difference_usd;
+                deltaAmountEl.textContent = `اختلاف قیمت: ${diff > 0 ? '+' : ''}${diff.toFixed(2)} دلار`;
+                deltaAmountEl.className = `badge ${Math.abs(diff) > 1.0 ? 'badge-london' : 'badge-info'}`;
+            } else {
+                deltaAmountEl.textContent = "اختلاف: در انتظار داده همزمان";
+            }
+        }
+        if (deltaNoteEl && data.price_delta && data.price_delta.note) {
+            deltaNoteEl.textContent = data.price_delta.note;
+        }
+    } catch (_err) {
+        console.warn("Comparison fetch failed:", _err);
+    }
+}
+
+async function fetchStrategyState() {
+    const badgeEl = document.getElementById("stateMachineBadge");
+    const lastSigEl = document.getElementById("sideLastSignal");
+    if (!badgeEl && !lastSigEl) return;
+    try {
+        const res = await fetch("/api/strategy/state", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (badgeEl && data.current_state) {
+            const stateNames = {
+                "WAITING_FOR_SESSION": "در انتظار سشن",
+                "BUILDING_RANGE": "تشکیل محدوده آسیا",
+                "RANGE_FINALIZED": "سطوح آسیا تثبیت شد",
+                "SWEEP_DETECTED": "نفوذ نقدینگی (Sweep)",
+                "RECLAIM_CONFIRMED": "تأیید بازپس‌گیری (Reclaim)",
+                "STRUCTURE_CONFIRMED": "شکست ساختار (BOS)",
+                "RETEST_CONFIRMED": "تأیید پولبک (Retest)",
+                "ENTRY_ELIGIBLE": "واجد شرایط ورود",
+                "PAPER_ORDER": "سفارش ارسال شد",
+                "POSITION_MANAGEMENT": "مدیریت موقعیت باز",
+                "CLOSED": "پایان چرخه ستاپ"
+            };
+            badgeEl.textContent = stateNames[data.current_state] || data.current_state;
+            badgeEl.title = data.last_reason || "";
+        }
+        if (lastSigEl) {
+            if (data.active_setup) {
+                const s = data.active_setup;
+                const dir = s.direction === "BUY" ? "خرید" : "فروش";
+                lastSigEl.innerHTML = `<strong>${dir}</strong> روی ${safeText(s.target_level_name)} (${formatGoldPrice(s.target_level_val)})`;
+                lastSigEl.className = s.direction === "BUY" ? "text-green" : "text-red";
+            } else {
+                lastSigEl.textContent = "بدون ستاپ فعال";
+                lastSigEl.className = "text-muted";
+            }
+        }
+    } catch (_err) {
+        console.warn("Strategy state fetch failed:", _err);
+    }
+}
+
+async function fetchSupervisorReport() {
+    try {
+        const res = await fetch("/api/agent/supervisor-report", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const setTxt = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && val !== undefined && val !== null) el.textContent = String(val);
+        };
+
+        if (data.last_inspection) {
+            setTxt("auditLastInspection", toShamsiDateTime(data.last_inspection));
+        }
+        setTxt("auditDiscoveredIssue", data.discovered_issue);
+        setTxt("auditProbableCause", data.probable_cause);
+        setTxt("auditReproTest", data.reproduction_test);
+        setTxt("auditProposedPatch", data.proposed_patch);
+        setTxt("auditTestOutcome", data.test_outcome);
+        setTxt("auditVerificationStatus", data.verification_status);
+        setTxt("auditGitRef", data.inspected_git_ref);
+        setTxt("auditStrategyResult", data.strategy_audit_result);
+
+        if (data.open_incidents_count !== undefined) setTxt("agentOpenIncidents", data.open_incidents_count);
+        if (data.hypotheses_count !== undefined) setTxt("agentHypotheses", data.hypotheses_count);
+        if (data.pending_proposals_count !== undefined) setTxt("agentProposals", data.pending_proposals_count);
+        if (data.verified_fixes_count !== undefined) setTxt("agentVerifiedFixes", data.verified_fixes_count);
+    } catch (_err) {
+        console.warn("Supervisor report fetch failed:", _err);
+    }
 }
