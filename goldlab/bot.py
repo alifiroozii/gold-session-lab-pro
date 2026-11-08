@@ -99,6 +99,17 @@ class AutomatedPaperBot:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_daily_limits (
+                    bot_id TEXT NOT NULL,
+                    day_utc TEXT NOT NULL,
+                    opening_equity REAL NOT NULL,
+                    claimed_orders INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(bot_id, day_utc)
+                )
+                """
+            )
             conn.commit()
 
     def _mark_bar_processed(self, timeframe: str, bar_timestamp: datetime) -> bool:
@@ -112,6 +123,42 @@ class AutomatedPaperBot:
             ).rowcount
             conn.commit()
         return inserted == 1
+
+    def _sync_daily_risk_counters(self) -> None:
+        """Restore daily loss baseline and order count after process restarts."""
+        current_day = self.heartbeat_time.astimezone(TZ_UTC).date().isoformat()
+        account = self.broker.accounts.get(self.account_id)
+        if account is None:
+            return
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO bot_daily_limits "
+                "(bot_id, day_utc, opening_equity, claimed_orders) "
+                "VALUES (?, ?, ?, 0)",
+                (self.bot_id, current_day, account.equity),
+            )
+            row = conn.execute(
+                "SELECT opening_equity, claimed_orders FROM bot_daily_limits "
+                "WHERE bot_id=? AND day_utc=?",
+                (self.bot_id, current_day),
+            ).fetchone()
+            conn.commit()
+        self.last_trade_date = current_day
+        self.daily_start_balance = float(row[0])
+        self.today_trades_count = int(row[1])
+
+    def _claim_daily_order_slot(self) -> bool:
+        """Atomic fail-closed cap, even if a second local worker runs."""
+        with sqlite3.connect(self.db_path) as conn:
+            claimed = conn.execute(
+                "UPDATE bot_daily_limits SET claimed_orders=claimed_orders+1 "
+                "WHERE bot_id=? AND day_utc=? AND claimed_orders < ?",
+                (self.bot_id, self.last_trade_date, self.risk.max_daily_trades),
+            ).rowcount
+            conn.commit()
+        if claimed:
+            self.today_trades_count += 1
+        return bool(claimed)
 
     def log_event(self, event_type: str, message: str) -> None:
         now = datetime.now(TZ_UTC)
@@ -176,14 +223,9 @@ class AutomatedPaperBot:
         if self.state == BotState.STOPPED:
             return []
 
-        # Reset daily counters at midnight UTC
-        current_date_str = self.heartbeat_time.strftime("%Y-%m-%d")
-        if self.last_trade_date != current_date_str:
-            self.last_trade_date = current_date_str
-            self.today_trades_count = 0
-            acc_initial = self.broker.accounts.get(self.account_id)
-            if acc_initial:
-                self.daily_start_balance = acc_initial.equity
+        # Daily risk state is durable: restarting the app cannot reset
+        # the loss baseline or the count of already claimed order slots.
+        self._sync_daily_risk_counters()
 
         if not closed_candles:
             return []
@@ -330,6 +372,10 @@ class AutomatedPaperBot:
 
                 direction = OrderDirection.BUY if sig.direction == SignalDirection.BUY else OrderDirection.SELL
 
+                if not self._claim_daily_order_slot():
+                    self.log_event("MAX_DAILY_TRADES", "سقف روزانه ثبت سفارش مجازی تکمیل شد.")
+                    break
+
                 order = self.broker.submit_order(
                     account_id=self.account_id,
                     direction=direction,
@@ -340,7 +386,6 @@ class AutomatedPaperBot:
                     current_bid=current_bid,
                     current_ask=current_ask,
                 )
-                self.today_trades_count += 1
                 self.dispatched_signals.add(sig_key)
                 self.log_event(
                     "ORDER_DISPATCHED",
