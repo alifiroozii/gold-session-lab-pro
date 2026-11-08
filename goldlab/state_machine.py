@@ -256,10 +256,14 @@ class SessionTradingStateMachine:
 
         # State 2: BUILDING_RANGE
         elif self.current_state == SessionStrategyState.BUILDING_RANGE:
-            if self.ref_high is None or candle.high > self.ref_high:
-                self.ref_high = candle.high
-            if self.ref_low is None or candle.low < self.ref_low:
-                self.ref_low = candle.low
+            # Never include the first bar after 00:00 NY in the completed
+            # 20:00–00:00 NY reference range; its extrema are future data
+            # relative to the finalized reference for London/NY setups.
+            if SessionName.ASIA_REFERENCE in sessions:
+                if self.ref_high is None or candle.high > self.ref_high:
+                    self.ref_high = candle.high
+                if self.ref_low is None or candle.low < self.ref_low:
+                    self.ref_low = candle.low
 
             is_asia_complete = (
                 session_stats.get("asia_complete", False)
