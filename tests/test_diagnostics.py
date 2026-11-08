@@ -76,9 +76,15 @@ def test_autofix_proposal_approval_gate(test_db_path):
     res_fail = autofix.approve_and_apply_fix(prop.proposal_id, user_confirmed=False)
     assert res_fail["success"] is False
 
-    # Apply with user confirmation
-    res_ok = autofix.approve_and_apply_fix(prop.proposal_id, user_confirmed=True)
-    assert res_ok["success"] is True
+    # Approval alone cannot count as a real code patch.
+    res_unverified = autofix.approve_and_apply_fix(prop.proposal_id, user_confirmed=True)
+    assert res_unverified["success"] is False
+    assert autofix.get_proposal(prop.proposal_id).status == FixStatus.PROPOSED
 
+    # A recorded test result permits a REVIEW but never claims code was applied.
+    autofix.record_verification_result(prop.proposal_id, success=True, test_output="pytest -q: 0")
+    res_review = autofix.approve_and_apply_fix(prop.proposal_id, user_confirmed=True)
+    assert res_review["success"] is True
+    assert res_review["applied"] is False
     updated_prop = autofix.get_proposal(prop.proposal_id)
-    assert updated_prop.status == FixStatus.APPLIED
+    assert updated_prop.status == FixStatus.APPROVED_FOR_REVIEW
