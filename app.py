@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from goldlab.agent_bridge import AgentBridge
 from goldlab.autofix import SafeAutoFixEngine
@@ -526,11 +526,12 @@ class BotStateRequest(BaseModel):
 
 
 class BotRiskRequest(BaseModel):
-    risk_per_trade_pct: float
-    max_daily_loss_pct: float
-    max_open_positions: int
-    max_daily_trades: int
-    max_spread_pips: float
+    # Hard paper-trading risk ceilings. Never trust frontend controls alone.
+    risk_per_trade_pct: float = Field(gt=0, le=1.0, allow_inf_nan=False)
+    max_daily_loss_pct: float = Field(gt=0, le=2.0, allow_inf_nan=False)
+    max_open_positions: int = Field(ge=1, le=2)
+    max_daily_trades: int = Field(ge=1, le=4)
+    max_spread_pips: float = Field(gt=0, le=2.50, allow_inf_nan=False)
 
 
 class HypothesisCreateRequest(BaseModel):
