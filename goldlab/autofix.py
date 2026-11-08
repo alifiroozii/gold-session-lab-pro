@@ -28,7 +28,8 @@ class RiskLevel(str, Enum):
 class FixStatus(str, Enum):
     PROPOSED = "PROPOSED"
     VERIFIED = "VERIFIED"
-    APPLIED = "APPLIED"
+    APPLIED = "APPLIED"  # Legacy; no new change can claim this without a verified commit
+    APPROVED_FOR_REVIEW = "APPROVED_FOR_REVIEW"
     REJECTED = "REJECTED"
     FAILED = "FAILED"
 
@@ -185,23 +186,25 @@ class SafeAutoFixEngine:
                 "proposal": proposal,
             }
 
-        now_iso = datetime.now(TZ_UTC).isoformat()
+        # A database approval does NOT apply a Git patch or run tests.
+        # The external Antigravity agent must create a candidate commit, run
+        # regression tests and request a separate human-reviewed merge.
+        if proposal.status != FixStatus.VERIFIED:
+            return {
+                "success": False,
+                "message": "تست معتبر ثبت نشده است؛ ابتدا در Worktree جداگانه آزمایش کنید.",
+            }
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
-                """
-                UPDATE autofix_proposals
-                SET status = ?, applied_at = ?
-                WHERE proposal_id = ?
-                """,
-                (FixStatus.APPLIED.value, now_iso, proposal_id),
+                "UPDATE autofix_proposals SET status = ? WHERE proposal_id = ?",
+                (FixStatus.APPROVED_FOR_REVIEW.value, proposal_id),
             )
             conn.commit()
-
         return {
             "success": True,
-            "message": f"اصلاحیه {proposal_id} با موفقیت تایید و اعمال شد.",
+            "message": "اصلاحیه فقط برای بازبینی کد تأیید شد؛ هنوز روی کد فعال اعمال نشده است.",
             "proposal_id": proposal_id,
-            "applied_at": now_iso,
+            "applied": False,
         }
 
     def reject_fix(self, proposal_id: str, reason: str = "") -> None:
