@@ -178,8 +178,13 @@ class AgentBridge:
             hypotheses = query("hypotheses",
                                "SELECT hypothesis_id,title,rationale,status,sample_size,evidence_summary"
                                " FROM hypotheses ORDER BY updated_at DESC LIMIT 15")
+            safety_lessons = query("safety_lessons",
+                                   "SELECT event_id,reason,guidance,evidence,confidence,"
+                                   " first_seen_utc FROM safety_lessons"
+                                   " ORDER BY first_seen_utc DESC LIMIT 20")
         evidence = json.dumps(
             {"incidents": incidents, "autopsies": autopsies, "hypotheses": hypotheses,
+             "safety_lessons": safety_lessons,
              "agent_state": {k: v for k, v in state.items() if k != "events"}},
             ensure_ascii=False, indent=2,
         )
@@ -190,7 +195,7 @@ class AgentBridge:
             "Verify against real code, test output and source market data.\n\n"
             "1. Check current repository and distinguish demo/historical from verified live prices.\n"
             "2. Never send live orders or alter live Champion code. Use a separate Git worktree.\n"
-            "3. Inspect open incidents and recently closed virtual positions. Normal losses are not bugs.\n"
+            "3. Inspect open incidents, next-time safety lessons, and recently closed paper positions. Normal losses are not bugs.\n"
             "4. Select one reproducible defect or measurable hypothesis and document evidence.\n"
             "5. Write a failing regression test first, then make the minimal patch in a candidate worktree.\n"
             "6. Run tests and record the exact command, exit status, commit SHA and any limitations.\n"
