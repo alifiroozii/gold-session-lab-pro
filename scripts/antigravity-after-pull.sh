@@ -31,4 +31,11 @@ if [[ "$(uname -s)" == "Darwin" && "${GOLDLAB_OPEN_ANTIGRAVITY:-1}" == "1" ]]; t
     open -a "Google Antigravity" "$root" >/dev/null 2>&1 || true
   fi
 fi
+hooks="$(git rev-parse --git-path hooks)"
+if [[ -f "$hooks/goldlab-agent-headless-enabled" && -f "$hooks/goldlab-agent-headless-review.sh" ]]; then
+  # Explicit opt-in set at installation time. No direct code edits or trading.
+  nohup /bin/bash "$hooks/goldlab-agent-headless-review.sh" "$root" \
+    >> "$root/agent-work/agy-headless-supervisor.log" 2>&1 < /dev/null &
+  printf '[goldlab] Started optional read-only agy CLI review; results are recorded only after verification.\n'
+fi
 printf '[goldlab] Synced Antigravity handoff at commit %s; agent activity NOT automatically started.\n' "$commit"
