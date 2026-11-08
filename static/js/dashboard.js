@@ -274,13 +274,33 @@ function renderMarketData(data) {
     candleSeries.setData(chartBars);
     // Do not reset the user's zoom/pan every time a polling request arrives.
     if (!chartHasFittedOnce || chartRenderedTimeframe !== currentTimeframe) {
-        try { chart.timeScale().fitContent(); } catch (_e) {}
+        try {
+            const windowBars = {"1m": 450, "5m": 420, "15m": 240, "1h": 130};
+            const visibleCount = windowBars[currentTimeframe] || 420;
+            if (chartBars.length > visibleCount) {
+                chart.timeScale().setVisibleLogicalRange({
+                    from: chartBars.length - visibleCount,
+                    to: chartBars.length + 8
+                });
+            } else chart.timeScale().fitContent();
+        } catch (_e) { chart.timeScale().fitContent(); }
         chartHasFittedOnce = true;
         chartRenderedTimeframe = currentTimeframe;
     }
 
     // Update Quote Box
     const lastBar = currentCandles[currentCandles.length - 1];
+    const sessionBadge = document.getElementById("currentSessionText");
+    if (sessionBadge) {
+        const names = {
+            "Asia_Reference":"محدوده آسیا", "Tokyo":"توکیو",
+            "London":"لندن", "New_York":"نیویورک",
+            "London_NY_Overlap":"هم‌پوشانی لندن/نیویورک"
+        };
+        const sessions = (lastBar.sessions || []).map(x => names[x] || x);
+        sessionBadge.textContent = "آخرین کندل: " +
+            (sessions.length ? sessions.join(" / ") : "خارج از سشن‌های تعریف‌شده");
+    }
     // The provider label and execution status are updated before chart rendering.
 
     // Update Levels labels
@@ -454,7 +474,12 @@ function drawSessionBoxes() {
         const label = document.createElement("span");
         label.className = "session-box-label";
         label.style.color = color;
-        label.textContent = name + " · " + box.date;
+        label.textContent = name + " · " + box.date +
+            (box.completed ? "" : " · در حال شکل‌گیری");
+        rect.title = name + " " + box.date +
+            " | High: " + Number(box.high).toFixed(2) +
+            " | Low: " + Number(box.low).toFixed(2) +
+            (box.completed ? " | کامل" : " | ناقص");
         if (width > 66) rect.appendChild(label);
         overlay.appendChild(rect);
     }
@@ -469,6 +494,11 @@ function removeLiveQuoteLine() {
 
 function updateLiveQuoteLine(bid, ask, title = "قیمت لحظه‌ای (نقل‌قول)") {
     if (!candleSeries) return;
+    // A real broker quote line must not be superimposed on DEMO candles.
+    if (currentMarketData?.data_source !== "OANDA_HISTORICAL_MID") {
+        removeLiveQuoteLine();
+        return;
+    }
     if (!Number.isFinite(bid) || !Number.isFinite(ask) || ask <= bid) return;
     const mid = (bid + ask) / 2;
     if (!liveQuoteLine) {
