@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gold Session Lab Pro — آزمایشگاه تحلیل سشن‌های طلا و معاملات مجازی</title>
+    <title>Gold Session Lab Pro — آزمایشگاه تحلیل سشن‌های طلا و مرکز پژوهش خودکار</title>
     <!-- Vazirmatn Persian Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,8 +28,8 @@
         <div class="header-brand">
             <div class="brand-logo">🪙</div>
             <div>
-                <h1>Gold Session Lab Pro</h1>
-                <p class="brand-subtitle">پلتفرم تحلیل ساختار بازار طلا (XAUUSD) و سشن‌های معاملاتی</p>
+                <h1>Gold Session Lab Pro V3.0</h1>
+                <p class="brand-subtitle">سیستم خودپایش، خوداصلاح‌گر و یادگیرنده طلا (XAUUSD) با Google Antigravity</p>
             </div>
         </div>
 
@@ -61,6 +61,10 @@
                 <span class="dot dot-blue"></span>
                 <span id="currentSessionText">سشن: لندن / نیویورک</span>
             </div>
+            <div class="status-badge" id="regimeBadge">
+                <span class="dot dot-purple"></span>
+                <span id="regimeStatusText">رژیم: در حال ارزیابی</span>
+            </div>
             <div class="status-badge" id="botBadge">
                 <span class="dot dot-orange"></span>
                 <span id="botStatusText">ربات: فقط تحلیل</span>
@@ -73,7 +77,7 @@
         <div class="stat-card">
             <div class="stat-title">موجودی مجازی (Balance)</div>
             <div class="stat-value" id="accBalance">$10,000.00</div>
-            <div class="stat-sub">کیف پول شبیه‌سازی‌شده</div>
+            <div class="stat-sub">کیف پول شبیه‌سازی‌شده (Ledger OK)</div>
         </div>
         <div class="stat-card">
             <div class="stat-title">ارزش حساب (Equity)</div>
@@ -91,20 +95,21 @@
             <div class="stat-sub" id="totalTradesCount">تعداد معاملات: ۰</div>
         </div>
         <div class="stat-card">
-            <div class="stat-title">نرخ برد استراتژی (Win Rate)</div>
-            <div class="stat-value text-blue" id="stratWinRate">-%</div>
-            <div class="stat-sub" id="stratPF">فاکتور سود: -</div>
+            <div class="stat-title">نسخه فعال (Champion)</div>
+            <div class="stat-value text-gold" id="championName">Baseline-V1</div>
+            <div class="stat-sub" id="championStats">امید ریاضی: R=+0.42</div>
         </div>
         <div class="stat-card">
-            <div class="stat-title">امید ریاضی (Expectancy R)</div>
-            <div class="stat-value text-gold" id="stratExpectancy">۰.۰۰ R</div>
-            <div class="stat-sub" id="stratMaxDD">حداکثر افت: ۰.۰۰ R</div>
+            <div class="stat-title">ناظر مستقل ریسک (Guardian)</div>
+            <div class="stat-value text-blue" id="guardianStatus">فعال و ایمن</div>
+            <div class="stat-sub" id="guardianSub">افت روزانه: 0.0% / 2.0%</div>
         </div>
     </section>
 
     <!-- Navigation Bar -->
     <nav class="nav-tabs">
         <button class="nav-btn active" data-tab="tab-chart">📊 چارت تعاملی و سطوح ساختار</button>
+        <button class="nav-btn" data-tab="tab-ai-research">🧠 مرکز پژوهش هوشمند (AI Lab)</button>
         <button class="nav-btn" data-tab="tab-positions">💼 معاملات باز و سفارش‌ها</button>
         <button class="nav-btn" data-tab="tab-strategies">🎯 استراتژی‌ها و سیگنال‌ها</button>
         <button class="nav-btn" data-tab="tab-bot">🤖 ربات معامله‌گر خودکار</button>
@@ -183,7 +188,7 @@
                             </div>
                             <div class="form-row">
                                 <label>حد ضرر (Stop Loss):</label>
-                                <input type="number" id="orderSL" class="form-input" step="0.10" placeholder="اختیاری">
+                                <input type="number" id="orderSL" class="form-input" step="0.10" placeholder="اجباری برای مدیریت ریسک">
                             </div>
                             <div class="form-row">
                                 <label>حد سود (Take Profit):</label>
@@ -204,6 +209,206 @@
                                 <button class="btn btn-danger btn-sm" id="btnBotPause">توقف اضطراری</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: AI RESEARCH CENTER (NEW V3.0) -->
+        <div class="tab-pane" id="tab-ai-research">
+            <!-- Supervisor & Regime Banner -->
+            <div class="research-grid-top">
+                <div class="content-box">
+                    <div class="broker-actions-bar">
+                        <div>
+                            <h3 class="card-heading">🔬 سرپرست پژوهش و صف چرخه‌های کاری (Research Supervisor)</h3>
+                            <p class="text-muted">مدیریت حلقه‌های خودکار سلامت، عیب‌یابی، آزمون فرضیه‌ها و گزارش‌دهی ۲۴ ساعته.</p>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-outline btn-sm" onclick="triggerCycle('HEALTH_CHECK')">اجرای ممیزی سلامت</button>
+                            <button class="btn btn-outline btn-sm" onclick="triggerCycle('DIAGNOSTICS_CYCLE')">اجرای عیب‌یابی</button>
+                            <button class="btn btn-outline btn-sm" onclick="triggerCycle('RESEARCH_CYCLE')">چرخه پژوهش</button>
+                            <button class="btn btn-primary btn-sm" onclick="triggerCycle('NIGHTLY_EVALUATION')">تولید گزارش شبانه</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="data-table" id="supervisorJobsTable">
+                            <thead>
+                                <tr>
+                                    <th>شناسه تسک</th>
+                                    <th>نوع چرخه</th>
+                                    <th>وضعیت</th>
+                                    <th>زمان ثبت</th>
+                                    <th>خلاصه نتیجه</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="text-center text-muted">در حال بارگذاری صف تسک‌ها...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="content-box">
+                    <h3 class="card-heading">🌊 ناظر رژیم نوسانی بازار (Market Regime Monitor)</h3>
+                    <div id="regimeDetailsBox" class="p-2">
+                        <div class="stat-highlight-row">
+                            <div class="mini-stat">
+                                <span class="mini-label">رژیم اصلی:</span>
+                                <strong id="regimePrimary" class="text-blue">-</strong>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="mini-label">نسبت نوسان ATR:</span>
+                                <strong id="regimeVolRatio">-</strong>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="mini-label">شیب روند ADX:</span>
+                                <strong id="regimeTrendSlope">-</strong>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="mini-label">نرخ شکست جعلی:</span>
+                                <strong id="regimeFalseBreak">-</strong>
+                            </div>
+                        </div>
+                        <div class="regime-desc-card mt-3" id="regimeDesc">
+                            در حال تحلیل وضعیت نوسانی و روند قیمت طلا...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Champion vs Challenger Section -->
+            <div class="content-box mt-4">
+                <div class="broker-actions-bar">
+                    <div>
+                        <h3 class="card-heading">🏆 مسابقات استراتژی: قهرمان در برابر رقیب (Champion vs Challenger)</h3>
+                        <p class="text-muted">نسخه Challenger تنها پس از عبور از شرایط آماری (تعداد معامله ≥ ۳۰، بهبود امید ریاضی ≥ ۰.۱۵R و p-value < ۰.۰۵) و با تایید صریح کاربر ترفیع می‌یابد.</p>
+                    </div>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="data-table" id="strategyVersionsTable">
+                        <thead>
+                            <tr>
+                                <th>نسخه</th>
+                                <th>نام استراتژی</th>
+                                <th>وضعیت</th>
+                                <th>معاملات</th>
+                                <th>نرخ برد</th>
+                                <th>امید ریاضی (R)</th>
+                                <th>حداکثر افت</th>
+                                <th>نسبت شارپ</th>
+                                <th>ارزیابی ترفیع</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Hypotheses Registry & Trade Autopsies Row -->
+            <div class="research-grid-2col mt-4">
+                <div class="content-box">
+                    <div class="broker-actions-bar">
+                        <h3 class="card-heading">💡 دفتر ثبت فرضیه‌های کمی (Hypothesis Registry)</h3>
+                        <button class="btn btn-outline btn-sm" id="btnNewHypothesis">+ ثبت فرضیه جدید</button>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="data-table" id="hypothesesTable">
+                            <thead>
+                                <tr>
+                                    <th>شناسه</th>
+                                    <th>عنوان فرضیه</th>
+                                    <th>وضعیت</th>
+                                    <th>معیار هدف</th>
+                                    <th>تعداد نمونه</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="content-box">
+                    <h3 class="card-heading">🩺 کالبدشکافی معاملات بسته (Trade Autopsy)</h3>
+                    <p class="text-muted">تحلیل ریشه‌ای علت سود یا زیان بر اساس MAE، MFE و شرایط رژیم بازار.</p>
+                    <div class="table-responsive mt-3">
+                        <table class="data-table" id="autopsiesTable">
+                            <thead>
+                                <tr>
+                                    <th>معامله</th>
+                                    <th>استراتژی</th>
+                                    <th>نتیجه</th>
+                                    <th>حکم کالبدشکافی</th>
+                                    <th>آموزه ساختاری</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="text-center text-muted">کالبدشکافی برای معاملات گذشته ثبت نشده است.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Diagnostics & Safe Auto-Fix Section -->
+            <div class="content-box mt-4">
+                <h3 class="card-heading">🛠️ موتور عیب‌یابی و پیش‌نویس‌های اصلاح خودکار (Diagnostics & Auto-Fix)</h3>
+                <p class="text-muted">تفکیک قطعی باگ‌های کد، خطاهای اجرای بروکر و ضررهای طبیعی بازار، همراه با دروازه تایید انسانی برای تغییرات حساس.</p>
+                <div class="table-responsive mt-3">
+                    <table class="data-table" id="proposalsTable">
+                        <thead>
+                            <tr>
+                                <th>شناسه</th>
+                                <th>عنوان اصلاحیه</th>
+                                <th>فایل هدف</th>
+                                <th>سطح ریسک</th>
+                                <th>وضعیت</th>
+                                <th>تایید انسانی</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ML Quality Model & Latest Nightly Report -->
+            <div class="research-grid-2col mt-4">
+                <div class="content-box">
+                    <h3 class="card-heading">🤖 مدل یادگیری ماشین ارزیابی کیفیت معامله (Shadow Mode)</h3>
+                    <p class="text-muted">امتیازدهی احتمال موفقیت سیگنال‌ها بر اساس لایه‌های سشن، نسبت سایه و FVG بدون نشت آینده.</p>
+                    <div class="table-responsive mt-3">
+                        <table class="data-table" id="mlScoresTable">
+                            <thead>
+                                <tr>
+                                    <th>شناسه</th>
+                                    <th>استراتژی</th>
+                                    <th>احتمال برد P(Win)</th>
+                                    <th>رتبه کیفی</th>
+                                    <th>حالت اجرا</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="content-box">
+                    <div class="broker-actions-bar">
+                        <h3 class="card-heading">📜 آخرین گزارش جامع شبانه پژوهش (Daily Report)</h3>
+                        <button class="btn btn-outline btn-sm" onclick="loadLatestReport()">تازه‌سازی گزارش</button>
+                    </div>
+                    <div class="report-markdown-preview mt-3" id="latestReportContent">
+                        در حال دریافت آخرین گزارش روزانه...
                     </div>
                 </div>
             </div>
@@ -451,6 +656,29 @@
             <div class="modal-buttons mt-4">
                 <button class="btn btn-secondary" id="btnModalCancel">انصراف</button>
                 <button class="btn btn-primary" id="btnModalConfirm">تایید تراکنش</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for New Hypothesis -->
+    <div class="modal" id="hypothesisModal">
+        <div class="modal-dialog">
+            <h3>ثبت فرضیه پژوهشی جدید</h3>
+            <div class="form-row mt-3">
+                <label>عنوان فرضیه:</label>
+                <input type="text" id="hypTitle" class="form-input" placeholder="مثال: فیلتر اسپرد زیر ۳۰ سنت در سشن لندن">
+            </div>
+            <div class="form-row mt-2">
+                <label>منطق و شواهد اولیه:</label>
+                <textarea id="hypRationale" class="form-input" rows="3" placeholder="توضیح دلایل تحلیل کالبدشکافی"></textarea>
+            </div>
+            <div class="form-row mt-2">
+                <label>معیار هدف موفقیت:</label>
+                <input type="text" id="hypTarget" class="form-input" placeholder="مثال: Sharpe > 1.3, R Expectancy +0.20">
+            </div>
+            <div class="modal-buttons mt-4">
+                <button class="btn btn-secondary" onclick="closeHypothesisModal()">انصراف</button>
+                <button class="btn btn-primary" onclick="submitNewHypothesis()">ثبت در دفتر فرضیه‌ها</button>
             </div>
         </div>
     </div>

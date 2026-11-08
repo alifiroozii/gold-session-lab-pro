@@ -649,3 +649,285 @@ function initWebSocket() {
         console.warn("WebSocket fallback to polling mode:", e);
     }
 }
+
+// 15. AI Research Center Controller (V3.0)
+document.addEventListener("DOMContentLoaded", () => {
+    fetchResearchData();
+    setInterval(fetchResearchData, 6000);
+
+    const btnHypo = document.getElementById("btnNewHypothesis");
+    if (btnHypo) {
+        btnHypo.addEventListener("click", () => {
+            const modal = document.getElementById("hypothesisModal");
+            if (modal) modal.classList.add("show");
+        });
+    }
+});
+
+function closeHypothesisModal() {
+    const modal = document.getElementById("hypothesisModal");
+    if (modal) modal.classList.remove("show");
+}
+
+async function submitNewHypothesis() {
+    const title = document.getElementById("hypTitle").value;
+    const rationale = document.getElementById("hypRationale").value;
+    const target = document.getElementById("hypTarget").value;
+    if (!title) {
+        alert("لطفاً عنوان فرضیه را وارد کنید.");
+        return;
+    }
+    try {
+        const res = await fetch("/api/learning/hypotheses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, rationale, target_metric: target })
+        });
+        if (res.ok) {
+            closeHypothesisModal();
+            fetchResearchData();
+        }
+    } catch (e) {
+        console.error("Error creating hypothesis:", e);
+    }
+}
+
+async function triggerCycle(cycleType) {
+    try {
+        const res = await fetch(`/api/supervisor/trigger?cycle_type=${cycleType}`, { method: "POST" });
+        if (res.ok) {
+            fetchResearchData();
+            if (cycleType === "NIGHTLY_EVALUATION") {
+                loadLatestReport();
+            }
+        }
+    } catch (e) {
+        console.error("Error triggering cycle:", e);
+    }
+}
+
+async function loadLatestReport() {
+    try {
+        const res = await fetch("/api/reports/latest");
+        if (!res.ok) return;
+        const data = await res.json();
+        const el = document.getElementById("latestReportContent");
+        if (el) {
+            el.innerText = data.content;
+        }
+    } catch (e) {
+        console.error("Error loading report:", e);
+    }
+}
+
+async function approveProposal(proposalId) {
+    if (!confirm(`آیا اصلاحیه ${proposalId} را به صورت رسمی تایید و اعمال می‌کنید؟`)) return;
+    try {
+        const res = await fetch(`/api/autofix/proposals/${proposalId}/approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_confirmed: true })
+        });
+        const data = await res.json();
+        alert(data.message || "نتیجه ثبت شد.");
+        fetchResearchData();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function rejectProposal(proposalId) {
+    const reason = prompt("دلیل رد اصلاحیه را وارد کنید:") || "رد شده توسط کاربر";
+    try {
+        await fetch(`/api/autofix/proposals/${proposalId}/reject`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_confirmed: true, reason })
+        });
+        fetchResearchData();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function promoteChallenger(challengerId) {
+    if (!confirm(`آیا استراتژی ${challengerId} به عنوان قهرمان (Champion) جدید تایید و جایگزین شود؟`)) return;
+    try {
+        const res = await fetch("/api/promotion/promote", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ challenger_id: challengerId, user_confirmed: true })
+        });
+        const data = await res.json();
+        alert(data.message || "نتیجه ثبت شد.");
+        fetchResearchData();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function fetchResearchData() {
+    // 1. Supervisor Status & Jobs
+    try {
+        const resSup = await fetch("/api/supervisor/status");
+        if (resSup.ok) {
+            const data = await resSup.json();
+            if (data.champion) {
+                const champEl = document.getElementById("championName");
+                if (champEl) champEl.innerText = data.champion.name;
+                const statsEl = document.getElementById("championStats");
+                if (statsEl) statsEl.innerText = `امید ریاضی: R=${data.champion.expectancy_r.toFixed(2)}`;
+            }
+            const tbodyJobs = document.querySelector("#supervisorJobsTable tbody");
+            if (tbodyJobs && data.recent_jobs) {
+                tbodyJobs.innerHTML = data.recent_jobs.map(j => `
+                    <tr>
+                        <td><strong>${j.job_id}</strong></td>
+                        <td>${j.job_type}</td>
+                        <td><span class="badge ${j.status === 'COMPLETED' ? 'badge-pd' : 'badge-asia'}">${j.status}</span></td>
+                        <td>${j.created_at ? j.created_at.slice(11, 19) : '-'}</td>
+                        <td class="text-muted">${j.error_message ? j.error_message : (j.result ? JSON.stringify(j.result).slice(0, 50) : 'موفق')}</td>
+                    </tr>
+                `).join("");
+            }
+        }
+    } catch (e) {}
+
+    // 2. Regime Monitor
+    try {
+        const resReg = await fetch("/api/regime/current");
+        if (resReg.ok) {
+            const reg = await resReg.json();
+            const badge = document.getElementById("regimeStatusText");
+            if (badge) badge.innerText = `رژیم: ${reg.primary_regime}`;
+            const primaryEl = document.getElementById("regimePrimary");
+            if (primaryEl) primaryEl.innerText = reg.primary_regime;
+            const volEl = document.getElementById("regimeVolRatio");
+            if (volEl) volEl.innerText = `${reg.volatility_ratio}x`;
+            const slopeEl = document.getElementById("regimeTrendSlope");
+            if (slopeEl) slopeEl.innerText = reg.adx_trend_slope;
+            const falseEl = document.getElementById("regimeFalseBreak");
+            if (falseEl) falseEl.innerText = `${(reg.false_breakout_rate * 100).toFixed(0)}%`;
+            const descEl = document.getElementById("regimeDesc");
+            if (descEl) descEl.innerText = reg.description;
+        }
+    } catch (e) {}
+
+    // 3. Strategy Versions (Champion vs Challenger)
+    try {
+        const resVers = await fetch("/api/promotion/versions");
+        if (resVers.ok) {
+            const versions = await resVers.json();
+            const tbody = document.querySelector("#strategyVersionsTable tbody");
+            if (tbody) {
+                tbody.innerHTML = versions.map(v => `
+                    <tr>
+                        <td><strong>${v.version_id}</strong></td>
+                        <td>${v.name}</td>
+                        <td><span class="${v.is_champion ? 'badge-champion' : 'badge-challenger'}">${v.is_champion ? '👑 CHAMPION' : 'CHALLENGER'}</span></td>
+                        <td>${v.total_trades}</td>
+                        <td>${v.win_rate.toFixed(1)}%</td>
+                        <td class="font-weight-bold ${v.expectancy_r >= 0 ? 'text-green' : 'text-red'}">${v.expectancy_r.toFixed(2)} R</td>
+                        <td>${v.max_drawdown_pct.toFixed(1)}%</td>
+                        <td>${v.sharpe_ratio.toFixed(2)}</td>
+                        <td><span class="badge ${v.p_value_vs_champion <= 0.05 ? 'badge-pd' : 'badge-london'}">p=${v.p_value_vs_champion.toFixed(3)}</span></td>
+                        <td>
+                            ${v.is_champion ? '<span class="text-muted">نسخه فعال</span>' : `<button class="btn btn-primary btn-sm" onclick="promoteChallenger('${v.version_id}')">ترفیع به قهرمان 👑</button>`}
+                        </td>
+                    </tr>
+                `).join("");
+            }
+        }
+    } catch (e) {}
+
+    // 4. Hypotheses Registry
+    try {
+        const resHyp = await fetch("/api/learning/hypotheses");
+        if (resHyp.ok) {
+            const hypotheses = await resHyp.json();
+            const tbody = document.querySelector("#hypothesesTable tbody");
+            if (tbody) {
+                tbody.innerHTML = hypotheses.map(h => `
+                    <tr>
+                        <td><strong>${h.hypothesis_id}</strong></td>
+                        <td>${h.title}</td>
+                        <td><span class="badge badge-asia">${h.status}</span></td>
+                        <td>${h.target_metric}</td>
+                        <td>${h.sample_size}</td>
+                    </tr>
+                `).join("");
+            }
+        }
+    } catch (e) {}
+
+    // 5. Autopsies
+    try {
+        const resAut = await fetch("/api/learning/autopsies");
+        if (resAut.ok) {
+            const autopsies = await resAut.json();
+            const tbody = document.querySelector("#autopsiesTable tbody");
+            if (tbody && autopsies.length > 0) {
+                tbody.innerHTML = autopsies.map(a => `
+                    <tr>
+                        <td><strong>${a.trade_id}</strong></td>
+                        <td>${a.setup_id}</td>
+                        <td class="${a.pnl >= 0 ? 'text-green' : 'text-red'} font-weight-bold">${a.pnl >= 0 ? '+' : ''}$${a.pnl.toFixed(2)} (${a.r_multiple}R)</td>
+                        <td><span class="badge ${a.verdict.includes('WIN') ? 'badge-pd' : 'badge-london'}">${a.verdict}</span></td>
+                        <td>${a.takeaway_persian}</td>
+                    </tr>
+                `).join("");
+            }
+        }
+    } catch (e) {}
+
+    // 6. Auto-Fix Proposals
+    try {
+        const resFix = await fetch("/api/autofix/proposals");
+        if (resFix.ok) {
+            const proposals = await resFix.json();
+            const tbody = document.querySelector("#proposalsTable tbody");
+            if (tbody && proposals.length > 0) {
+                tbody.innerHTML = proposals.map(p => `
+                    <tr>
+                        <td><strong>${p.proposal_id}</strong></td>
+                        <td>${p.title}</td>
+                        <td><code>${p.target_file}</code></td>
+                        <td><span class="badge-risk-${p.risk_level.toLowerCase()}">${p.risk_level}</span></td>
+                        <td><span class="badge ${p.status === 'APPLIED' ? 'badge-pd' : 'badge-asia'}">${p.status}</span></td>
+                        <td>${p.requires_human_approval ? 'الزامی ⚠️' : 'خودکار'}</td>
+                        <td>
+                            ${p.status === 'PROPOSED' ? `
+                                <button class="btn btn-success btn-sm" onclick="approveProposal('${p.proposal_id}')">تایید ✅</button>
+                                <button class="btn btn-danger btn-sm" onclick="rejectProposal('${p.proposal_id}')">رد ❌</button>
+                            ` : `<span class="text-muted">${p.status}</span>`}
+                        </td>
+                    </tr>
+                `).join("");
+            } else if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">هیچ اصلاحیه بازی در صف انتظار نیست (سیستم سالم است).</td></tr>';
+            }
+        }
+    } catch (e) {}
+
+    // 7. ML Scores
+    try {
+        const resML = await fetch("/api/ml/scores");
+        if (resML.ok) {
+            const scores = await resML.json();
+            const tbody = document.querySelector("#mlScoresTable tbody");
+            if (tbody && scores.length > 0) {
+                tbody.innerHTML = scores.map(s => `
+                    <tr>
+                        <td><strong>${s.score_id}</strong></td>
+                        <td>${s.setup_id}</td>
+                        <td class="font-weight-bold text-blue">${(s.predicted_win_prob * 100).toFixed(1)}%</td>
+                        <td><span class="badge badge-pd">${s.quality_grade}</span></td>
+                        <td><span class="badge badge-london">${s.shadow_mode ? 'حالت سایه (Shadow)' : 'فعال'}</span></td>
+                    </tr>
+                `).join("");
+            } else if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">امتیازدهی یادگیری ماشین به محض دریافت اولین سیگنال ثبت می‌شود.</td></tr>';
+            }
+        }
+    } catch (e) {}
+}
