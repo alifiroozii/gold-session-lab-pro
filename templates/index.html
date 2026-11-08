@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Session Lab Pro — آزمایشگاه تحلیل سشن‌های طلا و معاملات مجازی</title>
+    <!-- Vazirmatn Persian Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <!-- Top Mandatory Disclaimer Banner -->
+    <div class="disclaimer-bar">
+        <div class="disclaimer-content">
+            <span class="shield-icon">🛡️</span>
+            <strong>محیط شبیه‌سازی و پژوهش کمی (Paper Trading Only):</strong>
+            تمام داده‌ها، موجودی‌ها و معاملات صرفاً شبیه‌سازی مجازی بوده و فاقد هرگونه تراکنش یا اتصال واقعی به بروکر است.
+        </div>
+        <div class="system-time" id="systemClock">UTC --:--:--</div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="main-header">
+        <div class="header-brand">
+            <div class="brand-logo">🪙</div>
+            <div>
+                <h1>Gold Session Lab Pro</h1>
+                <p class="brand-subtitle">پلتفرم تحلیل ساختار بازار طلا (XAUUSD) و سشن‌های معاملاتی</p>
+            </div>
+        </div>
+
+        <div class="header-tickers">
+            <div class="ticker-box">
+                <span class="ticker-label">نماد:</span>
+                <span class="ticker-val highlight-gold">XAU/USD</span>
+            </div>
+            <div class="ticker-box">
+                <span class="ticker-label">Bid:</span>
+                <span class="ticker-val" id="quoteBid">2650.25</span>
+            </div>
+            <div class="ticker-box">
+                <span class="ticker-label">Ask:</span>
+                <span class="ticker-val" id="quoteAsk">2650.50</span>
+            </div>
+            <div class="ticker-box">
+                <span class="ticker-label">اسپرد:</span>
+                <span class="ticker-val" id="quoteSpread">$0.25</span>
+            </div>
+        </div>
+
+        <div class="header-status">
+            <div class="status-badge" id="feedBadge">
+                <span class="dot dot-green"></span>
+                <span id="feedStatusText">فید فعال</span>
+            </div>
+            <div class="status-badge" id="sessionBadge">
+                <span class="dot dot-blue"></span>
+                <span id="currentSessionText">سشن: لندن / نیویورک</span>
+            </div>
+            <div class="status-badge" id="botBadge">
+                <span class="dot dot-orange"></span>
+                <span id="botStatusText">ربات: فقط تحلیل</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Top Stats Row -->
+    <section class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-title">موجودی مجازی (Balance)</div>
+            <div class="stat-value" id="accBalance">$10,000.00</div>
+            <div class="stat-sub">کیف پول شبیه‌سازی‌شده</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">ارزش حساب (Equity)</div>
+            <div class="stat-value" id="accEquity">$10,000.00</div>
+            <div class="stat-sub" id="accFloatingSub">سود/زیان شناور: $0.00</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">مارجین آزاد (Free Margin)</div>
+            <div class="stat-value" id="accFreeMargin">$10,000.00</div>
+            <div class="stat-sub" id="accMarginLevel">سطح مارجین: 0.0%</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">سود محقق‌شده (Realized)</div>
+            <div class="stat-value text-green" id="accRealized">$0.00</div>
+            <div class="stat-sub" id="totalTradesCount">تعداد معاملات: ۰</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">نرخ برد استراتژی (Win Rate)</div>
+            <div class="stat-value text-blue" id="stratWinRate">-%</div>
+            <div class="stat-sub" id="stratPF">فاکتور سود: -</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">امید ریاضی (Expectancy R)</div>
+            <div class="stat-value text-gold" id="stratExpectancy">۰.۰۰ R</div>
+            <div class="stat-sub" id="stratMaxDD">حداکثر افت: ۰.۰۰ R</div>
+        </div>
+    </section>
+
+    <!-- Navigation Bar -->
+    <nav class="nav-tabs">
+        <button class="nav-btn active" data-tab="tab-chart">📊 چارت تعاملی و سطوح ساختار</button>
+        <button class="nav-btn" data-tab="tab-positions">💼 معاملات باز و سفارش‌ها</button>
+        <button class="nav-btn" data-tab="tab-strategies">🎯 استراتژی‌ها و سیگنال‌ها</button>
+        <button class="nav-btn" data-tab="tab-bot">🤖 ربات معامله‌گر خودکار</button>
+        <button class="nav-btn" data-tab="tab-broker">🏦 کیف پول و بروکر مجازی</button>
+        <button class="nav-btn" data-tab="tab-backtest">📈 بکتست و مقایسه جامع</button>
+        <button class="nav-btn" data-tab="tab-calendar">📅 اخبار و تقویم کلان</button>
+        <button class="nav-btn" data-tab="tab-health">🔍 سلامت سیستم و لاگ‌ها</button>
+    </nav>
+
+    <!-- MAIN VIEW CONTAINER -->
+    <main class="main-content">
+
+        <!-- TAB 1: CHART & ANALYSIS -->
+        <div class="tab-pane active" id="tab-chart">
+            <div class="chart-layout">
+                <div class="chart-main-column">
+                    <div class="chart-toolbar">
+                        <div class="timeframe-selector">
+                            <button class="tf-btn" data-tf="1m">1m</button>
+                            <button class="tf-btn active" data-tf="5m">5m</button>
+                            <button class="tf-btn" data-tf="15m">15m</button>
+                            <button class="tf-btn" data-tf="1h">1h</button>
+                        </div>
+                        <div class="layer-toggles">
+                            <label><input type="checkbox" id="toggleSessions" checked> سشن‌ها (آسیا/لندن/نیویورک)</label>
+                            <label><input type="checkbox" id="toggleLevels" checked> سطوح کلیدی (Asia/PDH/PDL)</label>
+                            <label><input type="checkbox" id="toggleSignals" checked> سیگنال‌ها و مارکرها</label>
+                            <label><input type="checkbox" id="toggleTrades" checked> معاملات باز/بسته</label>
+                        </div>
+                        <div class="replay-controls">
+                            <button class="btn btn-secondary btn-sm" id="btnReplayPrev">⏮ کندل قبل</button>
+                            <button class="btn btn-primary btn-sm" id="btnReplayPlay">▶ بازپخش (Replay)</button>
+                            <button class="btn btn-secondary btn-sm" id="btnReplayNext">کندل بعد ⏭</button>
+                        </div>
+                    </div>
+
+                    <!-- Chart Container -->
+                    <div id="chartContainer" class="chart-viewport"></div>
+
+                    <!-- Chart Level Indicators -->
+                    <div class="session-levels-bar">
+                        <div class="level-tag"><span class="badge badge-asia">آسیا:</span> سقف: <strong id="lblAsiaH">-</strong> | کف: <strong id="lblAsiaL">-</strong> | میانه: <strong id="lblAsiaM">-</strong></div>
+                        <div class="level-tag"><span class="badge badge-london">لندن:</span> سقف: <strong id="lblLonH">-</strong> | کف: <strong id="lblLonL">-</strong></div>
+                        <div class="level-tag"><span class="badge badge-pd">روز قبل:</span> PDH: <strong id="lblPDH">-</strong> | PDL: <strong id="lblPDL">-</strong></div>
+                    </div>
+                </div>
+
+                <!-- Side Trading Column -->
+                <div class="chart-side-column">
+                    <!-- Manual Paper Order Form -->
+                    <div class="side-card">
+                        <h3 class="card-heading">📝 سفارش سریع دستی (Paper)</h3>
+                        <form id="orderForm" class="order-form">
+                            <div class="form-row">
+                                <label>جهت معامله:</label>
+                                <div class="direction-switch">
+                                    <button type="button" class="btn-dir btn-buy active" id="btnDirBuy">خرید (BUY)</button>
+                                    <button type="button" class="btn-dir btn-sell" id="btnDirSell">فروش (SELL)</button>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <label>نوع سفارش:</label>
+                                <select id="orderTypeSelect" class="form-select">
+                                    <option value="MARKET">سفارش مستقیم بازار (Market)</option>
+                                    <option value="LIMIT">سفارش شرطی لیمیت (Limit)</option>
+                                    <option value="STOP">سفارش شرطی استاپ (Stop)</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
+                                <label>حجم معامله (لات):</label>
+                                <input type="number" id="orderLots" class="form-input" value="0.10" step="0.01" min="0.01" max="10.0">
+                            </div>
+                            <div class="form-row" id="targetPriceRow" style="display:none;">
+                                <label>قیمت فعال‌سازی (Order Price):</label>
+                                <input type="number" id="orderTargetPrice" class="form-input" step="0.10">
+                            </div>
+                            <div class="form-row">
+                                <label>حد ضرر (Stop Loss):</label>
+                                <input type="number" id="orderSL" class="form-input" step="0.10" placeholder="اختیاری">
+                            </div>
+                            <div class="form-row">
+                                <label>حد سود (Take Profit):</label>
+                                <input type="number" id="orderTP" class="form-input" step="0.10" placeholder="اختیاری">
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block" id="btnSubmitOrder">ثبت سفارش آزمایشی</button>
+                        </form>
+                    </div>
+
+                    <!-- Bot Quick Status -->
+                    <div class="side-card">
+                        <h3 class="card-heading">🤖 وضعیت ربات خودکار</h3>
+                        <div class="bot-control-box">
+                            <div class="bot-state-display" id="botStateDisplay">حالت فعلی: فقط تحلیل</div>
+                            <div class="bot-btn-group">
+                                <button class="btn btn-outline btn-sm" id="btnBotAnalysis">فقط تحلیل</button>
+                                <button class="btn btn-success btn-sm" id="btnBotAuto">ترید خودکار آزمایشی</button>
+                                <button class="btn btn-danger btn-sm" id="btnBotPause">توقف اضطراری</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: POSITIONS & ORDERS -->
+        <div class="tab-pane" id="tab-positions">
+            <div class="content-box">
+                <h3 class="card-heading">موقعیت‌های باز جاری (Open Positions)</h3>
+                <div class="table-responsive">
+                    <table class="data-table" id="positionsTable">
+                        <thead>
+                            <tr>
+                                <th>شناسه</th>
+                                <th>نماد</th>
+                                <th>جهت</th>
+                                <th>حجم (لات)</th>
+                                <th>قیمت ورود</th>
+                                <th>قیمت جاری</th>
+                                <th>حد ضرر (SL)</th>
+                                <th>حد سود (TP)</th>
+                                <th>سود/زیان شناور</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="10" class="text-center text-muted">هیچ موقعیت بازی وجود ندارد.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="content-box mt-4">
+                <h3 class="card-heading">سفارش‌های معلق (Pending Orders)</h3>
+                <div class="table-responsive">
+                    <table class="data-table" id="pendingOrdersTable">
+                        <thead>
+                            <tr>
+                                <th>شناسه</th>
+                                <th>جهت</th>
+                                <th>نوع</th>
+                                <th>حجم</th>
+                                <th>قیمت هدف</th>
+                                <th>SL</th>
+                                <th>TP</th>
+                                <th>زمان ثبت</th>
+                                <th>وضعیت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="10" class="text-center text-muted">سفارش معلقی موجود نیست.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: STRATEGIES -->
+        <div class="tab-pane" id="tab-strategies">
+            <div class="content-box">
+                <h3 class="card-heading">مدیریت ۸ استراتژی ساختار بازار طلا</h3>
+                <div class="strategies-grid" id="strategiesGrid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <div class="content-box mt-4">
+                <h3 class="card-heading">آخرین سیگنال‌های تولیدشده (Signal Log)</h3>
+                <div class="table-responsive">
+                    <table class="data-table" id="signalsTable">
+                        <thead>
+                            <tr>
+                                <th>زمان سیگنال</th>
+                                <th>استراتژی</th>
+                                <th>جهت</th>
+                                <th>قیمت ورود فرضی</th>
+                                <th>SL</th>
+                                <th>TP</th>
+                                <th>ریسک R</th>
+                                <th>دلیل اعتبارسنجی</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="8" class="text-center text-muted">سیگنالی در این بازه ثبت نشده است.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: AUTOMATED BOT -->
+        <div class="tab-pane" id="tab-bot">
+            <div class="content-box">
+                <h3 class="card-heading">تنظیمات محافظت از ریسک ربات خودکار</h3>
+                <div class="risk-settings-form">
+                    <div class="form-group-grid">
+                        <div class="form-row">
+                            <label>ریسک در هر معامله (%):</label>
+                            <input type="number" id="riskPerTrade" class="form-input" value="0.5" step="0.1">
+                        </div>
+                        <div class="form-row">
+                            <label>سقف زیان روزانه (%):</label>
+                            <input type="number" id="maxDailyLoss" class="form-input" value="2.0" step="0.5">
+                        </div>
+                        <div class="form-row">
+                            <label>حداکثر پوزیشن‌های همزمان:</label>
+                            <input type="number" id="maxPositions" class="form-input" value="2" step="1">
+                        </div>
+                        <div class="form-row">
+                            <label>حداکثر معاملات روزانه:</label>
+                            <input type="number" id="maxDailyTrades" class="form-input" value="4" step="1">
+                        </div>
+                        <div class="form-row">
+                            <label>سقف مجاز اسپرد ($):</label>
+                            <input type="number" id="maxSpread" class="form-input" value="0.50" step="0.05">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-3" id="btnSaveRisk">ذخیره تنظیمات ریسک</button>
+                </div>
+            </div>
+
+            <div class="content-box mt-4">
+                <h3 class="card-heading">لاگ رویدادها و تصمیمات ربات (Bot Activity Log)</h3>
+                <div class="terminal-log-box" id="botEventLog">
+                    <!-- Event lines -->
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: PAPER BROKER & LEDGER -->
+        <div class="tab-pane" id="tab-broker">
+            <div class="content-box">
+                <div class="broker-actions-bar">
+                    <h3>مدیریت کیف پول مجازی طلا</h3>
+                    <div class="btn-group">
+                        <button class="btn btn-success" id="btnModalDeposit">واریز مجازی (+)</button>
+                        <button class="btn btn-warning" id="btnModalWithdraw">برداشت مجازی (-)</button>
+                        <button class="btn btn-danger" id="btnModalReset">ریست حساب به $۱۰,۰۰۰</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-box mt-4">
+                <h3 class="card-heading">دفتر کل تراکنش‌ها (Ledger Audit Trail)</h3>
+                <div class="table-responsive">
+                    <table class="data-table" id="ledgerTable">
+                        <thead>
+                            <tr>
+                                <th>شناسه تراکنش</th>
+                                <th>زمان</th>
+                                <th>نوع تراکنش</th>
+                                <th>مبلغ ($)</th>
+                                <th>مانده پس از تراکنش</th>
+                                <th>توضیحات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Ledger entries -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 6: BACKTEST & STRATEGY COMPARISON -->
+        <div class="tab-pane" id="tab-backtest">
+            <div class="content-box">
+                <div class="broker-actions-bar">
+                    <h3>مقایسه هم‌زمان ۸ استراتژی ساختار بازار طلا</h3>
+                    <button class="btn btn-primary" id="btnRunComparison">اجرای بکتست و مقایسه جامع 🚀</button>
+                </div>
+                <div class="table-responsive mt-3">
+                    <table class="data-table" id="comparisonTable">
+                        <thead>
+                            <tr>
+                                <th>شناسه</th>
+                                <th>نام استراتژی</th>
+                                <th>تعداد معامله</th>
+                                <th>نرخ برد</th>
+                                <th>فاکتور سود (PF)</th>
+                                <th>امید ریاضی (R)</th>
+                                <th>حداکثر افت سرمایه (R)</th>
+                                <th>اعتبار نمونه</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="8" class="text-center text-muted">دکمه «اجرای بکتست» را برای محاسبه آمار کلیک کنید.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="content-box mt-4">
+                <h3 class="card-heading">تحلیل حساسیت پارامترها (Sensitivity Matrix)</h3>
+                <div id="sensitivityContainer" class="p-3">
+                    <p class="text-muted">ماتریس پایداری پارامترهای نسبت سایه (Wick Ratio) و ضریب ATR پس از اجرای بکتست در این بخش ترسیم می‌شود.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 7: CALENDAR -->
+        <div class="tab-pane" id="tab-calendar">
+            <div class="content-box">
+                <h3 class="card-heading">تقویم رویدادهای کلان و فیلتر اخبار حساس (CPI, NFP, FOMC)</h3>
+                <p class="text-muted">ربات به صورت خودکار ۳۰ دقیقه قبل و بعد از انتشار این رویدادها ورود جدید را متوقف می‌سازد.</p>
+                <div class="table-responsive mt-3">
+                    <table class="data-table" id="calendarTable">
+                        <thead>
+                            <tr>
+                                <th>رویداد</th>
+                                <th>زمان انتشار (UTC)</th>
+                                <th>سطح تاثیر</th>
+                                <th>وضعیت فیلتر</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Calendar rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 8: HEALTH & LOGS -->
+        <div class="tab-pane" id="tab-health">
+            <div class="content-box">
+                <h3 class="card-heading">مانیتورینگ جامع سلامت فید داده و سیستم</h3>
+                <div class="health-grid" id="healthGrid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal for Virtual Deposit/Withdraw -->
+    <div class="modal" id="fundModal">
+        <div class="modal-dialog">
+            <h3 id="modalTitle">واریز وجه مجازی</h3>
+            <div class="form-row mt-3">
+                <label>مبلغ دلاری:</label>
+                <input type="number" id="modalAmount" class="form-input" value="1000" min="10">
+            </div>
+            <div class="modal-buttons mt-4">
+                <button class="btn btn-secondary" id="btnModalCancel">انصراف</button>
+                <button class="btn btn-primary" id="btnModalConfirm">تایید تراکنش</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
