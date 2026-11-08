@@ -158,6 +158,9 @@ def test_scenario_6_paper_auto_with_verified_quote_executes(tmp_path: Path) -> N
         {"asia": {"low": 2650.0, "high": 2670.0}} for _ in c
     ]
 
+    # Explicitly fund the fake account so the minimum 0.01 lot fits
+    # within 0.5% of account balance (no forced size-up is permitted).
+    broker.deposit("ACC_DEFAULT", 5000.0, notes="test-only virtual funding")
     open_positions_before = len(broker.positions)
     bid, ask = 2654.0, 2654.5  # Spread $0.50 within limit
 
