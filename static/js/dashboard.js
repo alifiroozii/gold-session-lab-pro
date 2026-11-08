@@ -762,6 +762,34 @@ function initForms() {
     // Backtest Comparison Button
     document.getElementById("btnRunComparison")?.addEventListener("click", runStrategyComparison);
 
+    // Risk settings: submit actual API request rather than leaving a dead UI button.
+    document.getElementById("btnSaveRisk")?.addEventListener("click", async () => {
+        const values = {
+            risk_per_trade_pct: Number(document.getElementById("riskPerTrade")?.value),
+            max_daily_loss_pct: Number(document.getElementById("maxDailyLoss")?.value),
+            max_open_positions: Number(document.getElementById("maxPositions")?.value),
+            max_daily_trades: Number(document.getElementById("maxDailyTrades")?.value),
+            max_spread_pips: Number(document.getElementById("maxSpread")?.value)
+        };
+        const button = document.getElementById("btnSaveRisk");
+        button.disabled = true;
+        try {
+            const response = await fetch("/api/bot/risk", {
+                method:"POST", headers:{"Content-Type":"application/json"},
+                body:JSON.stringify(values)
+            });
+            if (!response.ok) {
+                const failure = await response.json();
+                throw new Error(typeof failure.detail === "string"
+                    ? failure.detail : "مقادیر ریسک نامعتبر یا خارج از سقف ایمنی‌اند.");
+            }
+            alert("تنظیمات مدیریت ریسک مجازی ذخیره شد.");
+            await fetchBotData();
+        } catch(error) {
+            alert("ذخیره ناموفق: " + error.message);
+        } finally { button.disabled = false; }
+    });
+
     // Chart Layer Toggles (Declutter)
     document.getElementById("toggleSessions")?.addEventListener("change", updateChartLayers);
     document.getElementById("toggleSignals")?.addEventListener("change", updateChartLayers);
@@ -1322,7 +1350,7 @@ window.emergencyStop = async function() {
         const resp = await fetch("/api/bot/emergency-stop", { method: "POST" });
         const res = await resp.json();
         alert(res.message);
-        fetchBotStatus();
+        fetchBotData();
     } catch (e) {
         console.error(e);
     }
@@ -1334,7 +1362,7 @@ window.resumeBot = async function() {
         const resp = await fetch("/api/bot/resume", { method: "POST" });
         const res = await resp.json();
         alert(res.message);
-        fetchBotStatus();
+        fetchBotData();
     } catch (e) {
         console.error(e);
     }
