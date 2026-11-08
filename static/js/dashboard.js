@@ -15,8 +15,13 @@ let liveQuoteLine = null;
 let chartHasFittedOnce = false;
 let chartRenderedTimeframe = null;
 // --- چارت واحد تحلیلی سشن‌ها و سطوح معاملاتی طلا ---
-window.switchChartMode = function(_mode) {
-    // چارت واحد به عنوان تنها چارت اصلی فعال است
+window.switchChartMode = function(mode) {
+    const reference = mode !== "local";
+    document.getElementById("referenceChartPanel").hidden = !reference;
+    document.getElementById("localChartPanel").hidden = reference;
+    document.getElementById("btnReferenceChart").setAttribute("aria-pressed", String(reference));
+    document.getElementById("btnLocalChart").setAttribute("aria-pressed", String(!reference));
+    if (!reference) window.dispatchEvent(new Event("resize"));
 };
 
 // --- دریافت و اعمال قیمت زنده تریدینگ‌ویو برای اعداد داشبورد و چارت ---
@@ -89,6 +94,8 @@ function toShamsiDateTime(dateInput, includeTime = true) {
 document.addEventListener("DOMContentLoaded", () => {
     initClock();
     initTabs();
+    document.getElementById("btnReferenceChart")?.addEventListener("click", () => switchChartMode("reference"));
+    document.getElementById("btnLocalChart")?.addEventListener("click", () => switchChartMode("local"));
     initChart();
     initForms();
     fetchMarketData();
@@ -158,7 +165,7 @@ function initTabs() {
 // 3. Lightweight Charts Initializer
 function initChart() {
     const container = document.getElementById("chartContainer");
-    if (!container) return;
+    if (!container || typeof LightweightCharts === "undefined") return;
 
     chart = LightweightCharts.createChart(container, {
         width: container.clientWidth || 800,
@@ -277,6 +284,7 @@ function renderMarketData(data) {
         low: c.low,
         close: c.close
     }));
+    if (!candleSeries) return;
     candleSeries.setData(chartBars);
     // Do not reset the user's zoom/pan every time a polling request arrives.
     if (!chartHasFittedOnce || chartRenderedTimeframe !== currentTimeframe) {

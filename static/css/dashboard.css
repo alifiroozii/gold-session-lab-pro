@@ -767,3 +767,11 @@ button:disabled { opacity: .48; cursor: not-allowed; }
   font-weight: 600;
   font-size: 11px;
 }
+
+/* Independent official chart reference; broker quotes retain their own source. */
+.chart-source-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+#localChartPanel[hidden], #referenceChartPanel[hidden] { display: none !important; }
+.reference-chart-widget { height: 620px !important; width: 100%; direction: ltr; }
+.reference-chart-widget .tradingview-widget-container__widget { height: calc(100% - 32px); width: 100%; }
+.tradingview-widget-copyright { font-size: 12px; text-align: center; padding: 6px; }
+@media (max-width: 600px) { .reference-chart-widget { height: 500px !important; } }

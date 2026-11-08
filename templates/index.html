@@ -146,6 +146,22 @@
         <div class="tab-pane active" id="tab-chart">
             <div class="chart-layout">
                 <div class="chart-main-column">
+                    <div class="chart-source-switch" role="group" aria-label="منبع چارت">
+                        <button class="btn btn-primary" id="btnReferenceChart" aria-pressed="true">چارت TradingView</button>
+                        <button class="btn btn-secondary" id="btnLocalChart" aria-pressed="false">چارت پژوهشی و سشن‌ها</button>
+                    </div>
+                    <section id="referenceChartPanel" aria-label="چارت مرجع طلا">
+                        <p class="chart-footnote">منبع چارت: TradingView • نماد OANDA:XAUUSD • صرفاً نمایش؛ وضعیت تأخیر و بازار را داخل چارت ببینید.</p>
+                        <div class="tradingview-widget-container reference-chart-widget">
+                            <div class="tradingview-widget-container__widget"></div>
+                            <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/symbols/XAUUSD/?exchange=OANDA" rel="noopener noreferrer" target="_blank">XAUUSD chart by TradingView</a></div>
+                            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+                            {"autosize":true,"symbol":"OANDA:XAUUSD","interval":"5","timezone":"Asia/Tehran","theme":"light","style":"1","locale":"en","allow_symbol_change":true,"calendar":false,"hide_side_toolbar":false,"support_host":"https://www.tradingview.com"}
+                            </script>
+                        </div>
+                        <p class="chart-footnote">اگر چارت بارگذاری نشد، <a href="https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD" target="_blank" rel="noopener noreferrer">چارت را مستقیم باز کنید</a>. محدوده‌های سشن و معاملات برنامه در «چارت پژوهشی و سشن‌ها» هستند.</p>
+                    </section>
+                    <div id="localChartPanel" hidden>
                     <div class="chart-toolbar">
                         <div class="timeframe-selector">
                             <button class="tf-btn" data-tf="1m">1m</button>
@@ -179,6 +195,7 @@
                     <div class="chart-footnote" id="chartFootnote">
                         محدودهٔ آسیا: ۲۰:۰۰ تا ۰۰:۰۰ نیویورک (پژوهشی) • لندن: سبز • نیویورک: نارنجی • هم‌پوشانی: بنفش • خط قیمت فقط از مظنهٔ معتبر بروکر، نه اسکنر TradingView
                     </div>
+                    </div><!-- localChartPanel -->
 
                     <!-- Chart Level Indicators -->
                     <div class="session-levels-bar">

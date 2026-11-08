@@ -34,3 +34,6 @@ OANDA credentials absent: live entitlement, network reconnect/fills and authenti
 4. Verify full feed-to-close-to-journal pipeline, independent replay and untouched holdout; lock remaining strategy rules before changes. No performance statistics are certified here.
 5. Finish browser interaction/screenshot checks at 1440/1024/390px; existing UI/broker features were preserved, not comprehensively certified.
 6. Establish a successful supported AI invocation and durable job claiming before describing continuous AI supervision as operational. Human review remains required before promotion/merge.
+
+## Local chart follow-up
+Official TradingView Advanced Chart now opens by default for OANDA:XAUUSD, with a switch to the existing research chart. Native widget controls handle symbol/timeframe; paper quotes remain independent. Fixed widget autosize collapsing its height. Local server: http://127.0.0.1:8017/ (candidate worktree). Browser verified actual candle chart rendered, reference/research switching passed, zero page JS errors; 15 UI contract tests passed, Node syntax check passed. External ticker request was blocked in headless Chrome, but Advanced Chart loaded. Screenshot: /tmp/goldlab-reference-loaded.png. Display availability depends on TradingView/network; this is not execution-feed validation.
