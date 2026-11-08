@@ -105,3 +105,32 @@ def test_strict_provider_old_completed_bucket_cannot_trigger(tmp_path: Path) -> 
             "SELECT count(*) FROM bot_processed_candles WHERE bot_id=?", ("STRICT_DELAY",)
         ).fetchone()[0]
     assert count == 0
+
+
+
+def test_daily_risk_limits_survive_restart_and_claim_atomically(tmp_path: Path) -> None:
+    db_path = str(tmp_path / "limits.sqlite")
+    broker = PaperBroker(db_path=db_path)
+    from goldlab.bot import BotRiskSettings
+    at = datetime(2026, 11, 9, 14, 11, tzinfo=UTC)
+    bot = AutomatedPaperBot(
+        bot_id="PERSISTENT_LIMITS", broker=broker, db_path=db_path,
+        risk_settings=BotRiskSettings(max_daily_trades=1),
+    )
+    bot.heartbeat_time = at
+    bot._sync_daily_risk_counters()
+    baseline = bot.daily_start_balance
+    assert bot._claim_daily_order_slot() is True
+    assert bot._claim_daily_order_slot() is False
+
+    # Create a new bot instance pointing to the same SQLite — the cap and
+    # baseline cannot reset just by restarting the local process.
+    restarted = AutomatedPaperBot(
+        bot_id="PERSISTENT_LIMITS", broker=broker, db_path=db_path,
+        risk_settings=BotRiskSettings(max_daily_trades=1),
+    )
+    restarted.heartbeat_time = at
+    restarted._sync_daily_risk_counters()
+    assert restarted.today_trades_count == 1
+    assert restarted.daily_start_balance == baseline
+    assert restarted._claim_daily_order_slot() is False
