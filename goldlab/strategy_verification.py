@@ -114,8 +114,14 @@ def audit_point_in_time(engine: "ResearchEngine", max_signals: int = 12) -> dict
         candidates = [candidates[p] for p in sorted(set(positions))]
     findings: list[VerificationFinding] = []
     for signal in candidates:
-        # Original signal requires the next bar open; exclude everything after it.
-        prefix = candles[:signal.entry_index + 1]
+        # At entry time only the next bar OPEN is known, never its future H/L/C.
+        # Explicitly hide next-bar completion and all later bars from the replay.
+        next_bar = candles[signal.entry_index]
+        open_only = Candle(
+            timestamp=next_bar.timestamp, open=next_bar.open, high=next_bar.open,
+            low=next_bar.open, close=next_bar.open, is_closed=False,
+        )
+        prefix = list(candles[:signal.entry_index]) + [open_only]
         replay = ResearchEngine(setup_config=engine.setups.config, db_path=str(engine.data_pipeline.db_path))
         replay.load_candles(prefix, timeframe=engine.current_timeframe)
         replay.run_pipeline()
