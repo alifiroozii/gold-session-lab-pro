@@ -231,7 +231,32 @@ async def oanda_stream_loop() -> None:
                             await _broadcast_market_unavailable(reason)
                             continue
                         # A verified quote can update the local PAPER broker only.
+                        opened_before = {
+                            pid for pid, pos in broker.positions.items()
+                            if pos.status.value == "OPEN"
+                        }
                         broker.on_tick(quote.bid, quote.ask, timestamp=quote.timestamp)
+                        closed = []
+                        for pid in opened_before:
+                            pos = broker.positions.get(pid)
+                            if pos and pos.status.value == "CLOSED":
+                                if agent_bridge.record_closed_paper_trade(
+                                    trade_id=pid, direction=pos.direction.value,
+                                    entry_price=pos.entry_price,
+                                    exit_price=pos.close_price if pos.close_price is not None else pos.current_price,
+                                    realized_pnl=pos.realized_pnl,
+                                    close_reason=pos.close_reason or "CLOSED",
+                                    quote_source=quote.source,
+                                ):
+                                    closed.append(pid)
+                        if closed:
+                            count = agent_bridge.observe_local_issues()
+                            await asyncio.to_thread(agent_bridge.write_handoff)
+                            await ws_manager.broadcast_json({
+                                "type": "AGENT_OBSERVATIONS", "count": count,
+                                "timestamp": datetime.now(TZ_UTC).isoformat(),
+                            })
+                            await ws_manager.broadcast_json({"type": "FILL", "paper_closes": closed})
                         await ws_manager.broadcast_json({
                             "type": "TICK", "bid": quote.bid, "ask": quote.ask,
                             "bid_display": quote.bid_display,
@@ -561,6 +586,19 @@ async def close_position_endpoint(pos_id: str) -> Dict[str, Any]:
         sl_price=pos.sl_price or (pos.entry_price - 2.0),
         tp_price=pos.tp_price or (pos.entry_price + 4.0),
     )
+    agent_bridge.record_closed_paper_trade(
+        trade_id=pos.position_id, direction=pos.direction.value,
+        entry_price=pos.entry_price, exit_price=exit_p,
+        realized_pnl=closed_pos.realized_pnl,
+        close_reason=closed_pos.close_reason or "MANUAL_CLOSE",
+        quote_source=verified_quote.source,
+    )
+    observed = agent_bridge.observe_local_issues()
+    await asyncio.to_thread(agent_bridge.write_handoff)
+    await ws_manager.broadcast_json({
+        "type": "AGENT_OBSERVATIONS", "count": observed,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
 
     return {"status": "success", "realized_pnl": closed_pos.realized_pnl}
 
