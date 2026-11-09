@@ -1,0 +1,115 @@
+{
+  "split": "training",
+  "from_inclusive": "2024-12-01",
+  "to_exclusive": "2025-01-01",
+  "source": "simom1/XAUUSD-history",
+  "revision": "5d1bfa39cb8bb3715b027fa33815de7198fb1aca",
+  "replay_sha256": "efcb0bb536d74f591d392afbf2f969b028e75fda2decefe77e89b162a235dfa0",
+  "quote_loader_sha256": "cd827985f8bc12ef279c54161730c58291eb5e87a7e3b5fba6ac5f787770bb56",
+  "native_source_sha256": "b5586cb074ffb3f8c76689b1dee32bd946a5fe0e3a901ce9f00b168fb9b67fe8",
+  "granularity": "tick",
+  "cost_model": {
+    "balance_usd": 1000.0,
+    "round_turn_usd_per_lot": 10.0,
+    "base_slippage_usd_per_oz_per_market_leg": 0.05,
+    "stress_slippage_usd_per_oz_per_market_leg": 0.1
+  },
+  "files": {
+    "xauusd_2024_12.parquet": "774b06a5d39d7e93e3c57029791dc656c8647f18",
+    "xauusd_2025_07.parquet": "2850095e26d0384cd1d0c27b19f966fc54f8dd84"
+  },
+  "quality": {
+    "invalid_ticks": 0
+  },
+  "coverage": {
+    "first": "2024-12-01 23:05:00+00:00",
+    "last": "2024-12-31 21:57:00+00:00",
+    "observed_minutes": 28496,
+    "weekdays_under_1000_minutes": [
+      "2024-12-25"
+    ],
+    "monthly_observed_minutes": {
+      "2024-12": 28496
+    }
+  },
+  "results": {
+    "asia-utc:breakout:fast": {
+      "signals": 648,
+      "base": {
+        "trades": 12,
+        "net": -31.3,
+        "return_pct": -3.13,
+        "profit_factor": 0.7032,
+        "win_pct": 33.33,
+        "mean_r": -0.2284,
+        "closed_trade_drawdown_pct": 7.11,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-12": -31.3
+        },
+        "session_net": {
+          "overlap": -20.78,
+          "new-york": -47.28,
+          "london": 36.76
+        }
+      },
+      "stress": {
+        "trades": 12,
+        "net": -37.2,
+        "return_pct": -3.72,
+        "profit_factor": 0.6624,
+        "win_pct": 33.33,
+        "mean_r": -0.2657,
+        "closed_trade_drawdown_pct": 7.55,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-12": -37.2
+        },
+        "session_net": {
+          "overlap": -22.28,
+          "new-york": -49.58,
+          "london": 34.66
+        }
+      }
+    },
+    "asia-ny:breakout:fast": {
+      "signals": 747,
+      "base": {
+        "trades": 16,
+        "net": 49.24,
+        "return_pct": 4.92,
+        "profit_factor": 1.3949,
+        "win_pct": 50.0,
+        "mean_r": 0.1571,
+        "closed_trade_drawdown_pct": 4.58,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-12": 49.24
+        },
+        "session_net": {
+          "new-york": 14.71,
+          "overlap": -39.35,
+          "london": 73.88
+        }
+      },
+      "stress": {
+        "trades": 16,
+        "net": 42.04,
+        "return_pct": 4.2,
+        "profit_factor": 1.3247,
+        "win_pct": 50.0,
+        "mean_r": 0.1288,
+        "closed_trade_drawdown_pct": 4.98,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-12": 42.04
+        },
+        "session_net": {
+          "new-york": 12.91,
+          "overlap": -42.05,
+          "london": 71.18
+        }
+      }
+    }
+  }
+}

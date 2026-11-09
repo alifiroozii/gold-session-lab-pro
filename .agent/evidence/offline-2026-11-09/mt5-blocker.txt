@@ -1,0 +1,6 @@
+DK	0	08:27:55.384	Startup	successfully initialized from start config "Z:\tmp\goldlab-mt5.x2LeOq\bin\audit-offline-demo.ini"
+JO	0	08:27:55.814	Terminal	launched with Z:\tmp\goldlab-mt5.x2LeOq\bin\audit-offline-demo.ini
+CG	2	08:28:01.751	Tester	tester not started because the account is not specified
+EL	2	08:28:01.751	Terminal	tester didn't start
+KS	0	08:28:02.710	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+Terminal launcher exit: 191
