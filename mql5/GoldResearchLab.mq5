@@ -229,6 +229,7 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
       int london_hr=(int)(((utc+(EuropeSummer(utc)?3600:0))%86400)/3600);
       int ny_hr=(int)(((utc+NYOffset(utc))%86400)/3600);
       if(london_hr==9 || london_hr==11 || ny_hr==11 || ny_hr==13) return;
+      if(DynamicSessionRef>=5 && DynamicSessionRef<=7 && ny_hr==12) return;
    }
 
    // A signal closing at the reference endpoint must open on or after that endpoint.
@@ -257,6 +258,35 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
    if(Strategy==STRATEGY_SWEEP) side=SweepSide(bar,level);
    if(Strategy==STRATEGY_RANGE) side=RangeSide(bar,level,features.adx,features.atr);
    if(side==0) return;
+
+   if(DynamicSessionRef>=5 && DynamicSessionRef<=7 && side<0 && session!=SESSION_LONDON)
+   {
+      if(!TrendAligned(features,-1,20.0) || BreakoutSideEx(bar,bars[1],level,features.atr,true,0.45)>=0)
+         return;
+      if(DynamicSessionRef==7 && ConfirmationCount(bar,bars,features,-1)<2)
+         return;
+   }
+   if(DynamicSessionRef==6 || DynamicSessionRef==8 || DynamicSessionRef==10)
+   {
+      int london_hr=(int)(((utc+(EuropeSummer(utc)?3600:0))%86400)/3600);
+      if(session==SESSION_LONDON && london_hr==10 && (!TrendAligned(features,side,20.0) || BodyRatio(bar)<0.45))
+         return;
+   }
+   if((DynamicSessionRef==8 || DynamicSessionRef==10) && session==SESSION_OVERLAP && side<0 && !TrendAligned(features,-1,0.0) && features.m15_break!=-1)
+      return;
+   if(DynamicSessionRef==10)
+   {
+      double raw_sl=(bar.high-bar.low)+0.30;
+      double est_bps=(bar.close>0.0) ? (raw_sl/bar.close*10000.0) : 0.0;
+      if(est_bps>15.0 && (BodyRatio(bar)<0.60 || !TrendAligned(features,side,20.0)))
+         return;
+   }
+   if(DynamicSessionRef==9)
+   {
+      int london_hr=(int)(((utc+(EuropeSummer(utc)?3600:0))%86400)/3600);
+      if(session==SESSION_LONDON && london_hr==10) return;
+      if(session==SESSION_OVERLAP && side<0 && !TrendAligned(features,-1,0.0)) return;
+   }
 
    bool use_trend=(RequireH1Trend || MinH1ADX>0.0 || (DynamicSessionRef==4 && session!=SESSION_LONDON));
    if(use_trend && !TrendAligned(features,side,MinH1ADX)) return;

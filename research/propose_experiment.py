@@ -421,6 +421,139 @@ TRAINING_HYPOTHESES = [
             "SkipWhipsawHours": "true",
         },
     },
+    {
+        "code": "H26_stopband155_v7",
+        "hypothesis": "Champion V7 + Stop Band [5.8, 15.5] bps (blocks overextended >15.5 bps climax spikes while preserving 2nd-breakout entries)",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 15.5,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H27_stopband145_v7",
+        "hypothesis": "Champion V7 + Stop Band [5.8, 14.5] bps (blocks overextended >14.5 bps climax spikes while preserving 2nd-breakout entries)",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 14.5,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H28_ny_short_guard_v8",
+        "hypothesis": "V8 Pro: NY Asia Ref + Stop Band [5.8, 15.5] bps + Skip NY Lunch (12-13 NY) + NY Short Bear-Trap Guard (requires H1 EMA50 + ADX>=20 + Fresh Body>=0.45 for Shorts in NY)",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 5,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 15.5,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H29_ny_short_guard_ldn10_v8",
+        "hypothesis": "V8 Pro + London 10AM Trend Filter: Stop Band [5.8, 14.5] bps + Skip NY Lunch + NY Short Guard + London 10AM requires H1 EMA50 trend alignment",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 6,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 14.5,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H30_ny_short_strict_v8",
+        "hypothesis": "V8 Pro Strict: Stop Band [5.8, 14.5] bps + Skip NY Lunch + NY Short Guard with >=2 Confirmations",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 7,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 14.5,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H31_v8_smart_session",
+        "hypothesis": "V8 Smart Session: ATR Stop (MaxStopATR=2.5, MinStopBps=5.8) + London 10AM requires H1 Trend/ADX>=20/Body>=0.45 + Overlap Short requires H1 EMA50 alignment",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 8,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 0.0,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H32_v8_london10_skip",
+        "hypothesis": "V8 Pure Impulse: ATR Stop (MaxStopATR=2.5, MinStopBps=5.8) + Skip Mid-London 10AM Chop + Overlap Short requires H1 EMA50 alignment",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 9,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 0.0,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H33_v8_ultimate_pro",
+        "hypothesis": "V8 Ultimate Pro: NY Asia Ref + Stop Band [5.8, 17.2] bps + London 10AM Trend/Body Filter + Overlap Short requires H1 EMA50 or M15 BOS + Skip 4 Whipsaw Hours",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 8,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 17.2,
+            "SkipWhipsawHours": "true",
+        },
+    },
+    {
+        "code": "H34_v9_adaptive_impulse",
+        "hypothesis": "V9 Adaptive Impulse: NY Asia Ref + MinStopBps=5.8 + Wide-Stop (>15 bps) requires Marubozu Body>=0.60 & H1 Trend/ADX>=20 + London 10AM Filter + Overlap Short Guard",
+        "overrides": {
+            "Reference": 1,
+            "MaxRangeWidth": 30.0,
+            "MaxRangeATR": 10.0,
+            "MaxStopATR": 2.5,
+            "MaxTradesPerDay": 2,
+            "DynamicSessionRef": 10,
+            "MinStopBps": 5.8,
+            "MaxStopBps": 0.0,
+            "SkipWhipsawHours": "true",
+        },
+    },
 ]
 
 
@@ -571,9 +704,9 @@ def run_mt5_experiment(
         subprocess.run(cmd, cwd=str(MT5_DIR), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90)
     else:
         subprocess.Popen(cmd, cwd=str(MT5_DIR), env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for _ in range(40):
+        for _ in range(90):
             if report_path.is_file() and report_path.stat().st_size > 1000:
-                time.sleep(1.0)
+                time.sleep(1.5)
                 break
             time.sleep(0.5)
 
