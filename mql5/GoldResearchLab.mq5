@@ -47,6 +47,10 @@ input double MinStopBps=0.0;
 input double MaxStopBps=0.0;
 input double MaxRangeBps=0.0;
 input bool SkipWhipsawHours=false;
+input ConfirmationMethod Confirmation=CONFIRM_METHOD_NONE;
+input EuropeWindowKind EuropeWindow=EUROPE_ALL;
+input bool EuropeOnly=false;
+input int MinConfidenceScore=0;
 
 CTrade execution;
 Setup pending={};
@@ -170,6 +174,23 @@ void ContinueSetup(const MqlRates &bars[],const Features &features,const MqlTick
       ClearSetup();
       return;
    }
+   if(pending.stage==SETUP_NEXT_CANDLE)
+   {
+      int side=pending.side;
+      bool confirmed=(side>0) ? (bars[0].close>bars[1].close && bars[0].close>bars[0].open)
+                              : (bars[0].close<bars[1].close && bars[0].close<bars[0].open);
+      if(confirmed)
+      {
+         LogSetup("NEXT_CANDLE_CONFIRMED",pending,utc);
+         Emit(tick,utc,features.atr);
+      }
+      else
+      {
+         LogSetup("NEXT_CANDLE_FAILED",pending,utc);
+         ClearSetup();
+      }
+      return;
+   }
    if(pending.stage==SETUP_SWEEP)
    {
       if(utc-pending.observed!=300 || !Reclaimed(bars[0],pending.range,pending.side) ||
@@ -224,6 +245,17 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
    if(SkipLondonLateNY && session==SESSION_LONDON) return;
    if(SkipOverlap && session==SESSION_OVERLAP) return;
    if(SkipNY && session==SESSION_NY) return;
+   if(EuropeOnly)
+   {
+      int london_min=(int)(((utc+(EuropeSummer(utc)?3600:0))%86400)/60);
+      if(session!=SESSION_FRANKFURT && session!=SESSION_LONDON) return;
+      if(EuropeWindow==EUROPE_FRANKFURT_ONLY && (london_min<7*60 || london_min>=8*60)) return;
+      if(EuropeWindow==EUROPE_LONDON_08_09 && (london_min<8*60 || london_min>=9*60)) return;
+      if(EuropeWindow==EUROPE_LONDON_09_10 && (london_min<9*60 || london_min>=10*60)) return;
+      if(EuropeWindow==EUROPE_LONDON_10_11 && (london_min<10*60 || london_min>=11*60)) return;
+      if(EuropeWindow==EUROPE_LONDON_ALL && (london_min<8*60 || london_min>=11*60)) return;
+      if(EuropeWindow==EUROPE_ALL && (london_min<7*60 || london_min>=11*60)) return;
+   }
    if(SkipWhipsawHours)
    {
       int london_hr=(int)(((utc+(EuropeSummer(utc)?3600:0))%86400)/3600);
@@ -291,6 +323,49 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
    bool use_trend=(RequireH1Trend || MinH1ADX>0.0 || (DynamicSessionRef==4 && session!=SESSION_LONDON));
    if(use_trend && !TrendAligned(features,side,MinH1ADX)) return;
 
+   if(Confirmation==CONFIRM_METHOD_A_CANDLE_QUALITY)
+   {
+      if(!CandleQualityValid(bar,features.atr,level,side)) return;
+   }
+   else if(Confirmation==CONFIRM_METHOD_D_FVG)
+   {
+      if(!FvgConfirmed(bars,side)) return;
+   }
+   else if(Confirmation==CONFIRM_METHOD_E_M15_BOS)
+   {
+      if(features.m15_break!=side) return;
+   }
+   else if(Confirmation==CONFIRM_METHOD_F_LIQUIDITY_SWEEP)
+   {
+      if(!OpposingAsianSideSwept(bars,level,side)) return;
+   }
+   else if(Confirmation==CONFIRM_METHOD_G_H1_TREND)
+   {
+      if(!TrendAligned(features,side,18.0)) return;
+   }
+   else if(Confirmation==CONFIRM_METHOD_H_MOMENTUM_VOL)
+   {
+      if(features.volume_ratio<1.15 || (bar.high-bar.low)<0.90*features.atr || BodyRatio(bar)<0.45) return;
+   }
+   else if(Confirmation==CONFIRM_COMBO_RETEST_FVG)
+   {
+      if(!FvgConfirmed(bars,side)) return;
+   }
+   else if(Confirmation==CONFIRM_COMBO_FVG_BOS)
+   {
+      if(!FvgConfirmed(bars,side) || features.m15_break!=side) return;
+   }
+   else if(Confirmation==CONFIRM_COMBO_SWEEP_BOS)
+   {
+      if(!OpposingAsianSideSwept(bars,level,side) || features.m15_break!=side) return;
+   }
+   else if(Confirmation==CONFIRM_COMBO_QUALITY_SCORE)
+   {
+      int score=CalculateBreakoutScore(bar,bars,features,level,side);
+      int min_sc=(MinConfidenceScore>0 ? MinConfidenceScore : 50);
+      if(score<min_sc) return;
+   }
+
    double pivot=Strategy==STRATEGY_SWEEP && Mode==MODE_CONSERVATIVE ? ConfirmedPivot(bars,side) : 0;
    if(Strategy==STRATEGY_SWEEP && Mode==MODE_CONSERVATIVE &&
       (pivot<=0 || side*(bar.close-pivot)>=0)) return;
@@ -317,7 +392,8 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
             (Strategy==STRATEGY_BREAKOUT ? "BREAKOUT_CLOSED" : "RANGE_REJECTION"),pending,utc);
 
    if(Strategy==STRATEGY_SWEEP) pending.stage=SETUP_SWEEP;
-   else if(Mode==MODE_CONSERVATIVE) pending.stage=SETUP_RETEST;
+   else if(Confirmation==CONFIRM_METHOD_B_NEXT_CANDLE) pending.stage=SETUP_NEXT_CANDLE;
+   else if(Confirmation==CONFIRM_METHOD_C_RETEST || Confirmation==CONFIRM_COMBO_RETEST_FVG || Mode==MODE_CONSERVATIVE) pending.stage=SETUP_RETEST;
    else Emit(tick,utc,features.atr);
 }
 

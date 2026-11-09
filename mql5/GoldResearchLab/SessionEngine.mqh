@@ -2,7 +2,15 @@
 #define GOLD_SESSION_ENGINE
 
 enum BrokerClock { CLOCK_UNSPECIFIED, CLOCK_UTC, CLOCK_LITEFINANCE_EU };
-enum LabSession { SESSION_NONE, SESSION_LONDON, SESSION_OVERLAP, SESSION_NY };
+enum LabSession { SESSION_NONE, SESSION_LONDON, SESSION_OVERLAP, SESSION_NY, SESSION_FRANKFURT };
+enum EuropeWindowKind {
+   EUROPE_ALL,            // 07:00 - 11:00 London (Frankfurt + London full)
+   EUROPE_FRANKFURT_ONLY, // 07:00 - 08:00 London
+   EUROPE_LONDON_08_09,   // 08:00 - 09:00 London (London Open Impulse)
+   EUROPE_LONDON_09_10,   // 09:00 - 10:00 London
+   EUROPE_LONDON_10_11,   // 10:00 - 11:00 London
+   EUROPE_LONDON_ALL      // 08:00 - 11:00 London (London 3 hours)
+};
 
 datetime CalendarTime(const int year, const int month, const int day, const int hour=0)
 {
@@ -87,6 +95,7 @@ LabSession SessionAt(const datetime utc)
    int ny=(int)((utc+NYOffset(utc))%86400)/60;
    bool london_open=london>=8*60 && london<17*60;
    bool ny_open=ny>=9*60+30 && ny<15*60+30;
+   if(london>=7*60 && london<8*60) return SESSION_FRANKFURT;
    if(london_open && ny_open) return SESSION_OVERLAP;
    if(ny_open) return SESSION_NY;
    if(london_open && london<12*60) return SESSION_LONDON;

@@ -2,7 +2,7 @@
 #define GOLD_LEVEL_DETECTOR
 #include "SessionEngine.mqh"
 
-enum ReferenceKind { REF_ASIA_UTC, REF_ASIA_NY, REF_LONDON, REF_NY_OPEN, REF_PREV_DAY, REF_PREV_WEEK, REF_LONDON_UTC };
+enum ReferenceKind { REF_ASIA_UTC, REF_ASIA_NY, REF_LONDON, REF_NY_OPEN, REF_PREV_DAY, REF_PREV_WEEK, REF_LONDON_UTC, REF_ASIA_FRANKFURT };
 struct PriceRange { double low,high,open; };
 
 bool ValidBar(const MqlRates &bar)
@@ -24,6 +24,7 @@ bool ReferenceWindow(const ReferenceKind kind,const datetime utc,datetime &start
       case REF_LONDON: start=LondonToUTC(london+8*3600); end=LondonToUTC(london+17*3600); break;
       case REF_LONDON_UTC: start=today+7*3600; end=today+13*3600; break;
       case REF_NY_OPEN: start=NYToUTC(ny+9*3600+1800); end=NYToUTC(ny+10*3600); break;
+      case REF_ASIA_FRANKFURT: start=LondonToUTC(london); end=LondonToUTC(london+7*3600); break;
       default: return false;
    }
    return end<=utc;
