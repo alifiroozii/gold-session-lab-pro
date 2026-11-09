@@ -1,0 +1,6 @@
+Model,Full_Trades,Full_NetProfit,Full_WinRate,Full_ProfitFactor,Full_MaxDrawdownPct,Full_Sharpe,InSample2025_NetProfit,InSample2025_WinRate,InSample2025_PF,InSample2025_DD,OutSample2026_NetProfit,OutSample2026_WinRate,OutSample2026_PF,OutSample2026_DD
+1. Balanced Original,209,938.4,44.0,1.15,38.87,5.73,857.8,48.2,1.4,28.08,6.1,38.8,1.0,56.0
+2. Heavy Original,76,465.5,46.1,1.24,18.99,8.69,427.4,48.9,1.51,14.71,-10.7,40.0,0.99,25.77
+3. Balanced Optimized,267,2134.2,44.2,1.26,31.15,8.54,1872.8,48.3,1.67,38.21,186.9,38.5,1.03,59.04
+4. Heavy Optimized,118,1712.2,48.3,1.64,13.48,21.63,1551.4,55.7,2.66,16.68,112.0,36.2,1.06,27.53
+5. Hybrid (Balanced + Heavy),271,553.3,45.0,1.08,44.6,3.91,1381.3,48.4,1.53,25.62,-943.3,40.0,0.8,95.32
