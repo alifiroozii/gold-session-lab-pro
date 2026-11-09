@@ -1,0 +1,94 @@
+{
+  "symbol": "XAUUSD_o",
+  "broker": "LiteFinance-MT5-Live",
+  "source_sha256": "b5586cb074ffb3f8c76689b1dee32bd946a5fe0e3a901ce9f00b168fb9b67fe8",
+  "inventory_basis": "Nonempty native TKC archives by file name. Intramonth continuity unverified.",
+  "cached_months": [
+    "202602",
+    "202603",
+    "202604",
+    "202605",
+    "202606",
+    "202607",
+    "202608"
+  ],
+  "missing_months": {
+    "training": [
+      "202411",
+      "202412",
+      "202501",
+      "202502",
+      "202503",
+      "202504",
+      "202505",
+      "202506",
+      "202507",
+      "202508",
+      "202509",
+      "202510"
+    ],
+    "validation": [
+      "202511",
+      "202512",
+      "202601"
+    ]
+  },
+  "training_variants": [
+    {
+      "id": "gl-811b5c6729e2060e155c",
+      "strategy": "breakout",
+      "mode": "fast",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-a8638997cc96a2c1395d",
+      "strategy": "breakout",
+      "mode": "standard",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-ce1cedbb7b1fda3a4b83",
+      "strategy": "breakout",
+      "mode": "conservative",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-e16d83ad451393d1072f",
+      "strategy": "sweep",
+      "mode": "fast",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-4bf731c9b1da6790825e",
+      "strategy": "sweep",
+      "mode": "standard",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-b9b6c51a50dbd045f9c6",
+      "strategy": "sweep",
+      "mode": "conservative",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-f48e0bdfc4f20a9577f6",
+      "strategy": "range",
+      "mode": "fast",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-9a9fc73c7bc916963b6b",
+      "strategy": "range",
+      "mode": "standard",
+      "status": "MISSING_TICKS"
+    },
+    {
+      "id": "gl-937e6733afa6091be09d",
+      "strategy": "range",
+      "mode": "conservative",
+      "status": "MISSING_TICKS"
+    }
+  ],
+  "holdout_run": false,
+  "market_backtests_completed": 0
+}
