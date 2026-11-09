@@ -1,44 +1,20 @@
-# Gold Session Lab Pro — handoff (2026-11-08)
+# Gold Session Lab Pro research handoff
 
-Candidate branch: `codex/market-ui-paper-repair`; base `99f2e9f`.
-Latest implementation commit: `8559e3749e29f4c4cc3ea86bd2172e310f75360c`.
-Earlier shadow fixes: `0c87353e88d811605d62c3d1b651fc7f09f5050c`.
-This handoff is committed separately so its implementation SHA is exact.
+The `codex/mt5-session-research` worktree adds a standalone, nonvisual MT5 tester EA, modular MQL5 sources, native mathematical checks, a Windows compilation script and a SQLite experiment registry. Start with [research/README.md](../research/README.md) for exact rules, migration differences and operator steps.
 
-## Architecture and preserved components
-`app.py` hosts FastAPI, `/ws/live`, the read-only OANDA PRICE stream, and the independent five-second watchdog. `goldlab/market_safety.py` validates native bid/ask, provider timestamps, TTL and market breaks. OANDA history uses the currently documented account-scoped candles endpoint (https://developer.oanda.com/rest-live-v20/pricing-ep/). Lightweight Charts in `static/js/dashboard.js` renders candles/session overlays; it is not a data feed. Existing RTL/light UI and three tabs are preserved.
+## Verified local evidence
 
-`goldlab/paper_broker.py` owns SQLite paper orders/positions/accounting; `goldlab/bot.py` owns automated-paper gates. `goldlab/state_machine.py` records causal session transitions and shadow proposals. `goldlab/agent_bridge.py`, `supervisor.py`, `review_journal.py` collect evidence and research state. Original running workspace/champion is untouched.
+- Source baseline for this branch was `b59051db1f0e330c26e40b0b93a1479e151081d4`. Use `git rev-parse HEAD` for the delivered commit and the registry for the MQL source hash.
+- MetaEditor process exit 1 produced a new EX5 and a diagnostic summary of zero errors and zero warnings. The mathematical check EA compiled and reported zero fixture failures and custom result 1. The terminal recorded an error after the mathematical pass. Evidence is in `.agent/evidence/mt5/`.
+- The account-free model 4 attempt was blocked before market simulation. Terminal launcher exit was 191 and the terminal journal reported that an account was not specified.
+- Local LiteFinance `XAUUSD_o` real-tick cache files covered February–August 2026 by filename only. The training and validation preflight results are in `.agent/evidence/mt5/campaign-preflight.json`. The SQLite registry is local at `research/output/experiments.sqlite`.
+- `STRATEGY_AUDIT_SKIPPED`. No provenance-verified CSV is configured. Python suite evidence is in `.agent/evidence/mt5/pytest.txt`. The synthetic MQL fixtures cover DST, session windows, swing confirmation, FVG, range regime and retest conditions.
 
-## Implemented changes
-- Provider history now enters a dedicated strict complete-5m aggregation for shadow processing, independent of chart navigation (1m/15m/1h). Partial buckets are excluded.
-- Missing quotes produce NULL spread and REJECTED_QUOTE instead of a fabricated 0.30 spread. Untrusted/stale quotes are rejected against the candle close time, preventing current quotes from validating old proposals.
-- Calendar checks no longer bypass the reward/risk rejection; configured shadow spread threshold is respected.
-- Provider-candle processing exceptions reach diagnostics instead of disappearing silently.
+## Next steps
 
-## Test proof
-Interpreter: `/Users/alifiroozi/ali/سشن/.venv/bin/python`; execute from candidate root. The existing runtime was reusable; candidate editable install failed from pre-existing setuptools flat-layout discovery. No dependency changes were necessary.
+1. Use an isolated portable MT5 installation with a broker research/demo account and verify symbol specifications, actual server-time alignment, cost configuration and complete real-tick coverage. Confirm the broker and contract match the study.
+2. Run the nine prepared training variants and retain all reports and journals. Complete the trade-level attribution, causal replay and cost sensitivity gates before selecting any validation candidate.
+3. Freeze the selected configuration and source before opening the holdout. No MT5 Champion has been established. User review is required for any promotion.
+4. Original Python forward-bot parity remains unverified. The implementation uses documented reconstruction rules and differs from the local `ProSessionEngine` where noted in the research guide.
 
-`python -m pytest -q`: 134 tests, exit 0 (`.agent/evidence/final-suite.txt`). Seven new regression cases cover the repairs. Five initial failures and two quote-gate failures are saved in `before.txt` and `gates-before.txt`. Focused suite: 45 tests, exit 0. Mandatory strategy verification unit gate passed. Final gate rerun is in `final-gates.txt`. FastAPI/Starlette emit deprecation warnings.
-
-Uvicorn started successfully on 127.0.0.1:8017; GET `/`, `/api/market`, `/api/strategy/state` succeeded. No-provider chart returned no candles. Node syntax check passed. Browser screenshot attempt did not complete; responsive interaction/chart accuracy remains unverified.
-
-## Configuration and limits
-OANDA credentials absent: live entitlement, network reconnect/fills and authentic streaming are UNVERIFIED; mocked/unit coverage only. `STRATEGY_AUDIT_SKIPPED`: no provenance-verified CSV configured; no historical performance, holdout results or strategy certification. PAPER_AUTO remains blocked.
-
-`agy --version` = 1.1.10; help confirms plan/sandbox/print support. Read-only connectivity invocation exited 137 with no model response. AI connection and unattended scheduling are NOT VERIFIED. Deterministic observation is not an AI agent. AgentBridge evidence was recorded as OPERATOR, not fabricated Antigravity activity.
-
-## Next critical tasks
-1. Configure authorized OANDA credentials, verify timestamp/entitlement and capture licensed chronological history. Test disconnect/reconnect and candle gaps with actual provider data.
-2. Forward-test the repaired position callbacks with authorized provider quotes; trade outcomes now persist before strategy callbacks and only the matching order changes setup state.
-3. Audit restart restoration of active setup/pending signal context and atomic processed-candle claims before permitting any automatic order path.
-4. Verify full feed-to-close-to-journal pipeline, independent replay and untouched holdout; lock remaining strategy rules before changes. No performance statistics are certified here.
-5. Finish browser interaction/screenshot checks at 1440/1024/390px; existing UI/broker features were preserved, not comprehensively certified.
-6. Establish a successful supported AI invocation and durable job claiming before describing continuous AI supervision as operational. Human review remains required before promotion/merge.
-
-## Local chart follow-up
-Official TradingView Advanced Chart now opens by default for OANDA:XAUUSD, with a switch to the existing research chart. Native widget controls handle symbol/timeframe; paper quotes remain independent. Fixed widget autosize collapsing its height. Local server: http://127.0.0.1:8017/ (candidate worktree). Browser verified actual candle chart rendered, reference/research switching passed, zero page JS errors; 15 UI contract tests passed, Node syntax check passed. External ticker request was blocked in headless Chrome, but Advanced Chart loaded. Screenshot: /tmp/goldlab-reference-loaded.png. Display availability depends on TradingView/network; this is not execution-feed validation.
-
-
-## Session/research follow-up
-`session_workspace.py` reconstructs six session windows (Sydney/Tokyo/Asia reference/London/NY/overlap), 30-day history and next-day schedules using IANA zones and server time. Provider-only high/low cache persists with missing/partial coverage exposed. `session-workspace.js` refreshes after tab return/reload. Queued six $1,000 research comparisons survive restart and enter AgentBridge handoff; protocol is `docs/SESSION_RESEARCH_PROTOCOL.md`. No comparisons have run. Full suite: 143 tests, exit 0 (`session-suite.txt`). Browser: six cards, 31 dates, persistent queue; 1440/1024/390px without overflow or JS errors. Widget remains independent; custom session price overlays need licensed candles. AI runtime remains unverified.
+For prior Python dashboard work, read this file at `b59051d`. No background researcher is running.
