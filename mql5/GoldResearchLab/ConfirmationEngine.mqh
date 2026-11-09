@@ -24,9 +24,24 @@ int ConfirmationCount(const MqlRates &bar,const MqlRates &bars[],const Features 
    return (int)trend+(int)fvg+(int)momentum+(int)(features.m15_break==side);
 }
 
+bool TrendAligned(const Features &features,const int side,const double min_adx)
+{
+   if(min_adx>0.0 && features.adx<min_adx) return false;
+   if(side>0 && features.hour_close<features.ema) return false;
+   if(side<0 && features.hour_close>features.ema) return false;
+   return true;
+}
+
 bool Retested(const MqlRates &bar,const double level,const int side)
 {
    return bar.low<=level+0.25 && bar.high>=level-0.25 &&
           side*(bar.close-level)>0 && RejectionWick(bar,side)>=0.35;
+}
+
+bool RetestedEx(const MqlRates &bar,const double level,const int side,const double atr)
+{
+   double tol=MathMax(0.25,0.20*atr);
+   return bar.low<=level+tol && bar.high>=level-tol &&
+          side*(bar.close-level)>0 && RejectionWick(bar,side)>=0.30;
 }
 #endif

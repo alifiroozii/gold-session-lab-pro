@@ -1,5 +1,5 @@
 #property copyright "Gold Session Lab Pro"
-#property version "1.00"
+#property version "1.10"
 #property strict
 
 #include "GoldResearchLab/SessionEngine.mqh"
@@ -21,9 +21,38 @@ input StrategyKind Strategy=STRATEGY_BREAKOUT;
 input EntryMode Mode=MODE_STANDARD;
 input bool SignalAuditOnly=true;
 
+// Challenger research parameters (defaults preserve 100% baseline behavior)
+input double MaxRangeWidth=30.0;
+input double MaxRangeATR=0.0;
+input bool OneTradePerSidePerDay=false;
+input bool RequireFreshBreakout=false;
+input double MinBreakoutBodyRatio=0.0;
+input bool RequireH1Trend=false;
+input double MinH1ADX=0.0;
+input double RiskPerTradePct=3.0;
+input double DailyLossLimitPct=6.0;
+input int MaxTradesPerDay=10;
+input double MinStopATR=0.0;
+input double MaxStopATR=0.0;
+input double StopBufferATR=0.0;
+input double TargetRR=1.5;
+input double BreakEvenRR=0.0;
+input double TrailRR=0.0;
+input double MaxLotCap=0.06;
+input bool SkipLondonLateNY=false;
+input bool SkipOverlap=false;
+input bool SkipNY=false;
+input int DynamicSessionRef=0;
+input double MinStopBps=0.0;
+input double MaxStopBps=0.0;
+input double MaxRangeBps=0.0;
+input bool SkipWhipsawHours=false;
+
 CTrade execution;
 Setup pending={};
 datetime processed=0;
+datetime traded_long_day=0;
+datetime traded_short_day=0;
 int atr_handle=INVALID_HANDLE,ema_handle=INVALID_HANDLE,adx_handle=INVALID_HANDLE;
 
 int OnInit()
@@ -55,6 +84,16 @@ void OnDeinit(const int reason)
    if(atr_handle!=INVALID_HANDLE) IndicatorRelease(atr_handle);
    if(ema_handle!=INVALID_HANDLE) IndicatorRelease(ema_handle);
    if(adx_handle!=INVALID_HANDLE) IndicatorRelease(adx_handle);
+}
+
+double OnTester()
+{
+   double net=TesterStatistics(STAT_PROFIT);
+   double pf=TesterStatistics(STAT_PROFIT_FACTOR);
+   double dd=TesterStatistics(STAT_EQUITY_DDREL_PERCENT);
+   double trades=TesterStatistics(STAT_TRADES);
+   PrintFormat("GLAB|SUMMARY|trades=%.0f|net=%.2f|pf=%.2f|dd=%.2f",trades,net,pf,dd);
+   return net;
 }
 
 bool FeatureAt(const MqlRates &bars[],const datetime server_open,Features &out)
@@ -94,8 +133,23 @@ void Emit(const MqlTick &tick,const datetime utc,const double atr)
    LogSetup("ENTRY_READY",pending,utc);
    if(!SignalAuditOnly && !PositionSelect(_Symbol))
    {
+      datetime today=DayStart(utc);
+      if(OneTradePerSidePerDay)
+      {
+         if(pending.side>0 && traded_long_day==today) { ClearSetup(); return; }
+         if(pending.side<0 && traded_short_day==today) { ClearSetup(); return; }
+      }
       TradePlan plan={};
-      if(BuildTradePlan(pending,tick,atr,ServerClock,plan)) SubmitResearchOrder(execution,pending,plan);
+      if(BuildTradePlan(pending,tick,atr,ServerClock,plan,
+                        RiskPerTradePct/100.0,DailyLossLimitPct/100.0,MaxTradesPerDay,
+                        MinStopATR,MaxStopATR,TargetRR,MaxLotCap,MinStopBps,MaxStopBps))
+      {
+         if(SubmitResearchOrder(execution,pending,plan))
+         {
+            if(pending.side>0) traded_long_day=today;
+            if(pending.side<0) traded_short_day=today;
+         }
+      }
       else LogSetup("RISK_REJECTED",pending,utc);
    }
    ClearSetup();
@@ -149,7 +203,9 @@ void ContinueSetup(const MqlRates &bars[],const Features &features,const MqlTick
       ClearSetup();
       return;
    }
-   if(Retested(bars[0],pending.level,pending.side))
+   bool retested=(MaxStopATR>0.0) ? RetestedEx(bars[0],pending.level,pending.side,features.atr)
+                                  : Retested(bars[0],pending.level,pending.side);
+   if(retested)
    {
       LogSetup("RETESTED",pending,utc);
       Emit(tick,utc,features.atr);
@@ -165,17 +221,46 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
       return;
    }
 
+   if(SkipLondonLateNY && session==SESSION_LONDON) return;
+   if(SkipOverlap && session==SESSION_OVERLAP) return;
+   if(SkipNY && session==SESSION_NY) return;
+   if(SkipWhipsawHours)
+   {
+      int london_hr=(int)(((utc+(EuropeSummer(utc)?3600:0))%86400)/3600);
+      int ny_hr=(int)(((utc+NYOffset(utc))%86400)/3600);
+      if(london_hr==9 || london_hr==11 || ny_hr==11 || ny_hr==13) return;
+   }
+
    // A signal closing at the reference endpoint must open on or after that endpoint.
+   ReferenceKind active_ref=Reference;
+   if(DynamicSessionRef==1 && (session==SESSION_OVERLAP || session==SESSION_NY))
+      active_ref=REF_LONDON_UTC;
+   else if(DynamicSessionRef==2 && session==SESSION_NY)
+      active_ref=REF_LONDON;
+   else if(DynamicSessionRef==3 && (session==SESSION_OVERLAP || session==SESSION_NY))
+      active_ref=REF_NY_OPEN;
+
    PriceRange level={};
-   if(!ReadRange(Reference,utc-300,ServerClock,level)) return;
+   if(!ReadRange(active_ref,utc-300,ServerClock,level)) return;
    double width=level.high-level.low;
-   if(width<2.0 || width>30.0) return;
+   double max_width=(MaxRangeATR>0.0) ? MathMax(MaxRangeWidth,MaxRangeATR*features.atr) : MaxRangeWidth;
+   if(MaxRangeBps>0.0 && level.open>0.0)
+      max_width=MathMax(max_width,level.open*MaxRangeBps/10000.0);
+   if(width<2.0 || width>max_width) return;
+
    MqlRates bar=bars[0];
+   bool use_fresh=(RequireFreshBreakout || (DynamicSessionRef==4 && session!=SESSION_LONDON));
+   double use_body=(MinBreakoutBodyRatio>0.0 ? MinBreakoutBodyRatio : (DynamicSessionRef==4 && session!=SESSION_LONDON ? 0.40 : 0.0));
    int side=0;
-   if(Strategy==STRATEGY_BREAKOUT) side=BreakoutSide(bar,level);
+   if(Strategy==STRATEGY_BREAKOUT)
+      side=BreakoutSideEx(bar,bars[1],level,features.atr,use_fresh,use_body);
    if(Strategy==STRATEGY_SWEEP) side=SweepSide(bar,level);
    if(Strategy==STRATEGY_RANGE) side=RangeSide(bar,level,features.adx,features.atr);
    if(side==0) return;
+
+   bool use_trend=(RequireH1Trend || MinH1ADX>0.0 || (DynamicSessionRef==4 && session!=SESSION_LONDON));
+   if(use_trend && !TrendAligned(features,side,MinH1ADX)) return;
+
    double pivot=Strategy==STRATEGY_SWEEP && Mode==MODE_CONSERVATIVE ? ConfirmedPivot(bars,side) : 0;
    if(Strategy==STRATEGY_SWEEP && Mode==MODE_CONSERVATIVE &&
       (pivot<=0 || side*(bar.close-pivot)>=0)) return;
@@ -196,7 +281,8 @@ void EvaluateBar(const MqlRates &bars[],const Features &features,const MqlTick &
       pending.target=(level.high+level.low)/2.0;
       anchor=side>0 ? MathMin(anchor,level.low) : MathMax(anchor,level.high);
    }
-   pending.stop=anchor-side*0.30;
+   double stop_buf=(StopBufferATR>0.0) ? MathMax(0.30,StopBufferATR*features.atr) : 0.30;
+   pending.stop=anchor-side*stop_buf;
    LogSetup(Strategy==STRATEGY_SWEEP ? "SWEEP_OBSERVED" :
             (Strategy==STRATEGY_BREAKOUT ? "BREAKOUT_CLOSED" : "RANGE_REJECTION"),pending,utc);
 
@@ -211,7 +297,7 @@ void OnTick()
    MqlTick tick={};
    if(!SymbolInfoTick(_Symbol,tick)) return;
    datetime tick_utc=ServerToUTC(tick.time,ServerClock);
-   if(!SignalAuditOnly) ManageResearchPosition(execution,tick_utc,ServerClock);
+   if(!SignalAuditOnly) ManageResearchPosition(execution,tick_utc,ServerClock,BreakEvenRR,TrailRR);
 
    datetime current=iTime(_Symbol,PERIOD_M5,0);
    if(current<=processed) return;
