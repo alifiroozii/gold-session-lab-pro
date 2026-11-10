@@ -55,6 +55,11 @@ int NYOffset(const datetime utc)
 
 int ServerOffset(const datetime utc,const BrokerClock clock)
 {
+   if(MQLInfoInteger(MQL_TESTER) == 0 && TimeGMT() > 0)
+   {
+      int diff = (int)(TimeCurrent() - TimeGMT());
+      return (int)MathRound((double)diff / 3600.0) * 3600;
+   }
    if(clock==CLOCK_LITEFINANCE_EU)
       return EuropeSummer(utc) ? 3*3600 : 2*3600;
    return 0;
@@ -62,6 +67,14 @@ int ServerOffset(const datetime utc,const BrokerClock clock)
 
 datetime ServerToUTC(const datetime server,const BrokerClock clock)
 {
+   // In live or demo trading, automatically detect broker UTC offset from TimeGMT():
+   if(MQLInfoInteger(MQL_TESTER) == 0 && TimeGMT() > 0)
+   {
+      int diff = (int)(TimeCurrent() - TimeGMT());
+      int hours_offset = (int)MathRound((double)diff / 3600.0);
+      return server - hours_offset * 3600;
+   }
+
    if(clock==CLOCK_UTC) return server;
    if(clock!=CLOCK_LITEFINANCE_EU) return 0;
    datetime winter=server-2*3600, summer=server-3*3600;
