@@ -35,12 +35,19 @@ enum StopLossTargetMode {
    SLTP_VOLATILITY_ATR     // Volatility: SL = 1.5*ATR, TP = 2.0*ATR
 };
 
+enum DayFilterMode {
+   DAY_ALL,                // Trade all days (Mon-Fri)
+   DAY_NO_FRIDAY,          // Exclude Friday (Mon-Thu only)
+   DAY_CORE_TUE_THU,       // Core days only (Tue, Wed, Thu)
+   DAY_NO_MONDAY           // Exclude Monday (Tue-Fri only)
+};
+
 input string ExpectedSymbol = "XAUUSD_o";
 input BrokerClock ServerClock = CLOCK_LITEFINANCE_EU;
 input ReferenceKind Reference = REF_ASIA_NY;
 input LotSizeMode LotMode = LOT_FIXED_RESEARCH;
 input double FixedLot = 0.10;
-input OptimizationModel ModelChoice = MODEL_BALANCED_OPTIMIZED;
+input OptimizationModel ModelChoice = MODEL_HEAVY_OPTIMIZED;
 input double RiskPerTradePct = 1.0;
 input double DailyLossLimitPct = 6.0;
 input double TargetRR = 1.5;
@@ -48,17 +55,20 @@ input double MaxRangeWidth = 30.0;
 input double MinStopBps = 5.8;
 
 // Advanced Exploration Switches (Independent Feature Toggles)
-input TimeWindowMode TimeWindow = WINDOW_08_09;
+input TimeWindowMode TimeWindow = WINDOW_08_10;
 input StopLossTargetMode SLTPMode = SLTP_FIXED_BAR_RR;
 input bool OptRequireRetest = false;          // Feature: Retest confirmation
-input bool OptUseAtrFilter = false;           // Feature: ATR overextension and minimum displacement
+input bool OptUseAtrFilter = true;            // Feature: ATR overextension and minimum displacement
 input double OptMinAtrRatio = 0.50;           // Bar range >= MinAtrRatio * ATR
 input double OptMaxAtrRatio = 2.50;           // Bar range <= MaxAtrRatio * ATR
 input bool OptRequireCloseLocation = false;   // Feature: Close in upper/lower 25% of candle
 input double OptVolumeRatioMin = 1.10;        // Feature: Tick volume ratio threshold
-input double OptFvgMinSize = 0.20;            // Feature: Minimum FVG gap size in dollars
+input double OptFvgMinSize = 0.35;            // Feature: Minimum FVG gap size in dollars
 input bool OptOpposingSweepBonus = false;     // Feature: Prior liquidity sweep confirmation
 input bool OptUseRangeWidthFilter = false;    // Feature: MaxRangeWidth filter
+input DayFilterMode DayFilter = DAY_NO_FRIDAY;// Seasonality: Day of Week Filter
+input double OptBreakEvenRR = 0.0;            // Feature: Move SL to Breakeven at RR distance (0.0 = disabled)
+input double OptTrailRR = 0.0;                // Feature: Trail SL at RR distance (0.0 = disabled)
 
 // State tracking
 int g_atr_handle = INVALID_HANDLE;
@@ -118,6 +128,18 @@ int OnInit()
    g_last_processed_bar = 0;
    g_traded_today = false;
    g_current_day_start = 0;
+   
+   PrintFormat("GLAB|INIT|%s|Server:%s|Login:%d|Balance:%.2f",
+               (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO ? "LIVE_DEMO" : "TESTER"),
+               AccountInfoString(ACCOUNT_SERVER),
+               (int)AccountInfoInteger(ACCOUNT_LOGIN),
+               AccountInfoDouble(ACCOUNT_BALANCE));
+               
+   Comment(StringFormat("=== GOLD SESSION LAB PRO v3.6 (CHAMPION) ===\nMode: %s | Server: %s | Login: %d\nBalance: $%.2f | Initialized successfully.",
+               (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO ? "LIVE DEMO" : "TESTER"),
+               AccountInfoString(ACCOUNT_SERVER),
+               (int)AccountInfoInteger(ACCOUNT_LOGIN),
+               AccountInfoDouble(ACCOUNT_BALANCE)));
    
    return INIT_SUCCEEDED;
 }
@@ -246,7 +268,7 @@ void OnTick()
    if(!SymbolInfoTick(_Symbol, tick)) return;
    
    datetime tick_utc = ServerToUTC(tick.time, ServerClock);
-   ManageResearchPosition(g_execution, tick_utc, ServerClock, 0.0, 0.0);
+   ManageResearchPosition(g_execution, tick_utc, ServerClock, OptBreakEvenRR, OptTrailRR);
    
    datetime current = iTime(_Symbol, PERIOD_M5, 0);
    if(current <= g_last_processed_bar) return;
@@ -266,9 +288,46 @@ void OnTick()
    ArraySetAsSeries(bars, true);
    if(CopyRates(_Symbol, PERIOD_M5, 1, 32, bars) != 32) return;
    
+   PriceRange level_ny={};
+   ReadRange(REF_ASIA_NY, utc-300, ServerClock, level_ny);
+   double range_width = level_ny.high - level_ny.low;
+
    int london_min = (int)(((utc + (EuropeSummer(utc)?3600:0)) % 86400) / 60);
    bool is_london = (london_min >= 8*60 && london_min < 11*60);
+   
+   // Live chart HUD
+   string status_str = g_traded_today ? "Traded Today (Max 1 Trade/Day Limit)" :
+                       (is_london ? "IN LONDON WINDOW - Active Breakout Monitoring" : "Outside London Window - Waiting for 08:00 UTC");
+   Comment(StringFormat(
+      "=====================================================\n" +
+      " GOLD SESSION LAB PRO v3.6 (CHAMPION MODEL)\n" +
+      "=====================================================\n" +
+      " Mode: %s\n" +
+      " Account: %s | Login: %d | Currency: %s\n" +
+      " Balance: $%.2f | Equity: $%.2f | Leverage: 1:%d\n" +
+      " Strategy: HEAVY OPTIMIZED (London 08-10 UTC, No-Friday)\n" +
+      " Sizing: %s (Value: %.2f)\n" +
+      " Asian Range High: %.2f | Low: %.2f | Width: $%.2f\n" +
+      " Current Server Time: %s | UTC: %s\n" +
+      " Execution Status: %s\n" +
+      "=====================================================",
+      (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO ? "LIVE DEMO ACCOUNT" : "STRATEGY TESTER"),
+      AccountInfoString(ACCOUNT_SERVER), (int)AccountInfoInteger(ACCOUNT_LOGIN), AccountInfoString(ACCOUNT_CURRENCY),
+      AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY), (int)AccountInfoInteger(ACCOUNT_LEVERAGE),
+      (LotMode == LOT_FIXED_RESEARCH ? "Fixed Lot" : "Dynamic Risk %"), (LotMode == LOT_FIXED_RESEARCH ? FixedLot : RiskPerTradePct),
+      level_ny.high, level_ny.low, range_width,
+      TimeToString(current, TIME_DATE|TIME_MINUTES), TimeToString(utc, TIME_DATE|TIME_MINUTES),
+      status_str
+   ));
+
    if(!is_london) return;
+   
+   // Day-of-week seasonality filter
+   MqlDateTime dt;
+   TimeToStruct(utc, dt);
+   if(DayFilter == DAY_NO_FRIDAY && dt.day_of_week == 5) return;
+   if(DayFilter == DAY_CORE_TUE_THU && (dt.day_of_week == 1 || dt.day_of_week == 5)) return;
+   if(DayFilter == DAY_NO_MONDAY && dt.day_of_week == 1) return;
    
    // Window check
    bool in_08_09 = (london_min >= 8*60 && london_min < 9*60);
@@ -280,11 +339,8 @@ void OnTick()
       case WINDOW_08_11: in_custom_window = (london_min >= 8*60 && london_min < 11*60); break;
    }
    
-   // Read Asian range REF_ASIA_NY
-   PriceRange level_ny={};
-   if(!ReadRange(REF_ASIA_NY, utc-300, ServerClock, level_ny)) return;
-   
-   double range_width = level_ny.high - level_ny.low;
+   // Validate range validity
+   if(level_ny.high <= level_ny.low) return;
    bool range_ok = (range_width >= 2.0 && range_width <= MaxRangeWidth);
    
    Features features={};
