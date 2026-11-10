@@ -4,8 +4,23 @@
 
 bool ResearchTester()
 {
-   return MQLInfoInteger(MQL_TESTER)!=0 && MQLInfoInteger(MQL_VISUAL_MODE)==0 &&
-          MQLInfoInteger(MQL_FORWARD)==0;
+   // Allow backtesting in Strategy Tester
+   if(MQLInfoInteger(MQL_TESTER) != 0) return true;
+   
+   // STRICT SAFETY GUARD: Permanently block REAL money accounts
+   if(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_REAL)
+   {
+      Alert("CRITICAL SAFETY: Live execution on REAL accounts is forbidden.");
+      return false;
+   }
+   
+   // Allow live execution on DEMO accounts
+   if(AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO)
+   {
+      return true;
+   }
+   
+   return false;
 }
 
 bool SubmitResearchOrder(CTrade &trade,const Setup &setup,const TradePlan &plan)

@@ -39,6 +39,7 @@ def run_mt5_test(run_id: str, overrides: dict, from_date="2025.01.01", to_date="
         f"OptFvgMinSize={overrides.get('OptFvgMinSize', 0.20)}",
         f"OptOpposingSweepBonus={'true' if overrides.get('OptOpposingSweepBonus', False) else 'false'}",
         f"OptUseRangeWidthFilter={'true' if overrides.get('OptUseRangeWidthFilter', False) else 'false'}",
+        f"DayFilter={overrides.get('DayFilter', 0)}",
     ]
     set_content = "\n".join(set_lines) + "\n"
     set_file = MT5_DIR / "MQL5" / "Profiles" / "Tester" / f"{run_id}.set"
