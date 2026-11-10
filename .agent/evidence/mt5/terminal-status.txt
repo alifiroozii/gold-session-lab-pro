@@ -1,0 +1,8 @@
+JE	0	08:15:51.387	Tester	last test passed with result "some error after pass finished" in 0:00:00.000
+OH	0	08:16:53.105	Startup	successfully initialized from start config "Z:\tmp\goldlab-mt5.x2LeOq\bin\audit.ini"
+JN	0	08:16:53.467	Terminal	launched with Z:\tmp\goldlab-mt5.x2LeOq\bin\audit.ini
+ON	2	08:16:58.673	Tester	tester not started because the account is not specified
+IF	2	08:16:58.673	Terminal	tester didn't start
+CM	0	08:17:00.059	Terminal	shutdown with -1000012353 (tester not started because the account is not specified)
+Mathematical tester process exit: 0
+Real-tick smoke attempt process exit: 191

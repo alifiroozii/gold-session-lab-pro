@@ -1,0 +1,402 @@
+"""
+Automated Paper Trading Bot for XAUUSD.
+Operates strictly in simulation/paper mode.
+Supports state machine: OFF, ANALYSIS_ONLY, PAPER_AUTO, PAUSED, DATA_DISCONNECTED, ERROR, STOPPED.
+Enforces institutional risk constraints: max daily loss, per-trade risk sizing, and consecutive loss cooldown.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple
+
+if TYPE_CHECKING:
+    from goldlab.state_machine import SessionTradingStateMachine
+
+from goldlab.engine import ResearchEngine
+from goldlab.paper_broker import OrderDirection, OrderType, PaperBroker
+from goldlab.types import Candle, SetupSignal, SignalDirection
+
+TZ_UTC = timezone.utc
+
+
+class BotState(str, Enum):
+    OFF = "OFF"
+    ANALYSIS_ONLY = "ANALYSIS_ONLY"
+    PAPER_AUTO = "PAPER_AUTO"
+    PAUSED = "PAUSED"
+    DATA_DISCONNECTED = "DATA_DISCONNECTED"
+    ERROR = "ERROR"
+    STOPPED = "STOPPED"
+
+
+@dataclass
+class BotRiskSettings:
+    risk_per_trade_pct: float = 0.50  # 0.5% risk per trade
+    max_daily_loss_pct: float = 2.00  # 2.0% max daily drawdown
+    max_open_positions: int = 2
+    max_daily_trades: int = 4
+    min_rr_ratio: float = 1.50
+    consecutive_losses_limit: int = 2
+    cooldown_bars: int = 6
+    max_spread_pips: float = 0.50  # Block entry if spread > $0.50
+
+
+class AutomatedPaperBot:
+    """Manages autonomous paper order execution on live/replay candle arrival."""
+
+    def __init__(
+        self,
+        bot_id: str = "BOT_XAU_ALPHA",
+        account_id: str = "ACC_DEFAULT",
+        broker: Optional[PaperBroker] = None,
+        engine: Optional[ResearchEngine] = None,
+        risk_settings: Optional[BotRiskSettings] = None,
+        db_path: str = "data/xauusd_lab.sqlite",
+        state_machine: Optional[SessionTradingStateMachine] = None,
+    ) -> None:
+        self.bot_id = bot_id
+        self.account_id = account_id
+        self.broker = broker or PaperBroker(db_path=db_path)
+        self.engine = engine or ResearchEngine(db_path=db_path)
+        self.risk = risk_settings or BotRiskSettings()
+        self.db_path = Path(db_path)
+        self.state_machine = state_machine
+
+        self.state: BotState = BotState.ANALYSIS_ONLY
+        self.today_trades_count: int = 0
+        self.consecutive_losses: int = 0
+        self.cooldown_remaining_bars: int = 0
+        self.daily_start_balance: float = 1000.0
+        self.last_trade_date: Optional[str] = None
+        self.dispatched_signals: Set[Tuple[str, str, int]] = set()
+        self.last_evaluation_time: Optional[datetime] = None
+        self.heartbeat_time: datetime = datetime.now(TZ_UTC)
+
+        self._init_bot_db()
+
+    def _init_bot_db(self) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bot_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    message TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_processed_candles (
+                    bot_id TEXT NOT NULL,
+                    timeframe TEXT NOT NULL,
+                    bar_timestamp TEXT NOT NULL,
+                    processed_at TEXT NOT NULL,
+                    PRIMARY KEY(bot_id, timeframe, bar_timestamp)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_daily_limits (
+                    bot_id TEXT NOT NULL,
+                    day_utc TEXT NOT NULL,
+                    opening_equity REAL NOT NULL,
+                    claimed_orders INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(bot_id, day_utc)
+                )
+                """
+            )
+            conn.commit()
+
+    def _mark_bar_processed(self, timeframe: str, bar_timestamp: datetime) -> bool:
+        """Fail-closed durable deduplication across polling and app restarts."""
+        with sqlite3.connect(self.db_path) as conn:
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO bot_processed_candles "
+                "(bot_id, timeframe, bar_timestamp, processed_at) VALUES (?,?,?,?)",
+                (self.bot_id, timeframe, bar_timestamp.isoformat(),
+                 datetime.now(TZ_UTC).isoformat()),
+            ).rowcount
+            conn.commit()
+        return inserted == 1
+
+    def _sync_daily_risk_counters(self) -> None:
+        """Restore daily loss baseline and order count after process restarts."""
+        current_day = self.heartbeat_time.astimezone(TZ_UTC).date().isoformat()
+        account = self.broker.accounts.get(self.account_id)
+        if account is None:
+            return
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO bot_daily_limits "
+                "(bot_id, day_utc, opening_equity, claimed_orders) "
+                "VALUES (?, ?, ?, 0)",
+                (self.bot_id, current_day, account.equity),
+            )
+            row = conn.execute(
+                "SELECT opening_equity, claimed_orders FROM bot_daily_limits "
+                "WHERE bot_id=? AND day_utc=?",
+                (self.bot_id, current_day),
+            ).fetchone()
+            conn.commit()
+        self.last_trade_date = current_day
+        self.daily_start_balance = float(row[0])
+        self.today_trades_count = int(row[1])
+
+    def _claim_daily_order_slot(self) -> bool:
+        """Atomic fail-closed cap, even if a second local worker runs."""
+        with sqlite3.connect(self.db_path) as conn:
+            claimed = conn.execute(
+                "UPDATE bot_daily_limits SET claimed_orders=claimed_orders+1 "
+                "WHERE bot_id=? AND day_utc=? AND claimed_orders < ?",
+                (self.bot_id, self.last_trade_date, self.risk.max_daily_trades),
+            ).rowcount
+            conn.commit()
+        if claimed:
+            self.today_trades_count += 1
+        return bool(claimed)
+
+    def log_event(self, event_type: str, message: str) -> None:
+        now = datetime.now(TZ_UTC)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO bot_events (bot_id, timestamp, event_type, state, message)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (self.bot_id, now.isoformat(), event_type, self.state.value, message),
+            )
+            conn.commit()
+
+    def set_state(self, new_state: BotState) -> None:
+        old_state = self.state
+        self.state = new_state
+        self.log_event("STATE_CHANGE", f"وضعیت ربات از {old_state.value} به {new_state.value} تغییر یافت.")
+
+    def emergency_stop(self, reason: str = "توقف اضطراری توسط اپراتور") -> None:
+        """Immediately halts all automated trading and locks bot into STOPPED state."""
+        self.set_state(BotState.STOPPED)
+        self.log_event("EMERGENCY_STOP", reason)
+
+    def resume_after_emergency_stop(self, target_state: BotState = BotState.ANALYSIS_ONLY) -> None:
+        """Explicit operator-approved recovery after emergency stop."""
+        if self.state == BotState.STOPPED:
+            self.log_event("MANUAL_REACTIVATION", f"فعال‌سازی مجدد پس از توقف اضطراری به وضعیت {target_state.value}")
+            self.set_state(target_state)
+
+    def on_trade_closed(self, pnl: float) -> None:
+        """Updates consecutive loss counter and activates cooldown if limit reached."""
+        if pnl < 0:
+            self.consecutive_losses += 1
+            if self.consecutive_losses >= self.risk.consecutive_losses_limit:
+                self.cooldown_remaining_bars = self.risk.cooldown_bars
+                self.log_event(
+                    "COOLDOWN_ACTIVATED",
+                    f"{self.consecutive_losses} زیان متوالی رخ داد. کول‌داون به مدت {self.risk.cooldown_bars} کندل فعال گردید.",
+                )
+        else:
+            self.consecutive_losses = 0
+
+    def on_candle_close(
+        self,
+        closed_candles: List[Candle],
+        current_bid: float,
+        current_ask: float,
+        current_time: Optional[datetime] = None,
+        strict_provider: bool = False,
+    ) -> List[SetupSignal]:
+        """Triggered when a candle closes.
+
+        1. Checks feed status and heartbeat
+        2. Evaluates risk thresholds (daily loss limit, max open positions)
+        3. Checks economic news blackout
+        4. Runs research engine strategy pipeline
+        5. If in PAPER_AUTO mode, sizes lots and dispatches paper orders
+        """
+        self.heartbeat_time = current_time or datetime.now(TZ_UTC)
+        self.last_evaluation_time = self.heartbeat_time
+
+        if self.state == BotState.STOPPED:
+            return []
+
+        # Daily risk state is durable: restarting the app cannot reset
+        # the loss baseline or the count of already claimed order slots.
+        self._sync_daily_risk_counters()
+
+        if not closed_candles:
+            return []
+
+        last_candle = closed_candles[-1]
+
+        if strict_provider:
+            # The application supplies provider-completed M1 bars and a
+            # separately verified live quote timestamp. Never treat a partial
+            # aggregated bar as confirmed, and never repeat the same event.
+            timeframe = self.engine.current_timeframe
+            minutes = {"1m": 1, "5m": 5, "15m": 15, "1h": 60}.get(timeframe)
+            if minutes is None or self.heartbeat_time.tzinfo is None:
+                return []
+            if not (current_bid > 0 and current_ask > current_bid):
+                return []
+            try:
+                completed = self.engine.data_pipeline.aggregate_candles(
+                    closed_candles, timeframe, require_complete=True
+                )
+            except ValueError:
+                self.log_event("INVALID_CANDLE_BATCH", "کندل‌های فید ناقص، تکراری یا نامعتبر هستند.")
+                return []
+            if not completed:
+                return []
+            bar_start = completed[-1].timestamp
+            bar_closes_at = bar_start + timedelta(minutes=minutes)
+            age = (self.heartbeat_time - bar_closes_at).total_seconds()
+            if age < 0 or age > 90:
+                # Last historical bar is not an immediate next-bar signal.
+                return []
+            if not self._mark_bar_processed(timeframe, bar_start):
+                return []
+
+        # 1. Feed Health Check
+        feed_health = self.engine.data_pipeline.diagnostics.check_feed_status(
+            closed_candles, current_time=self.heartbeat_time
+        )
+        if feed_health["status"] in ["FEED_STALE", "MARKET_CLOSED", "OFFLINE_EMPTY"]:
+            if self.state == BotState.PAPER_AUTO:
+                self.set_state(BotState.DATA_DISCONNECTED)
+            return []
+        elif self.state == BotState.DATA_DISCONNECTED:
+            # Fail closed. A recovered feed must NEVER silently re-arm
+            # auto trading; operator must approve a validated strategy again.
+            self.log_event("FEED_RECOVERED", "فید برگشت؛ ربات تا تأیید دستی در حالت توقف باقی می‌ماند.")
+            self.set_state(BotState.PAUSED)
+
+        # 2. Risk Pre-Checks
+        acc = self.broker.accounts.get(self.account_id)
+        if not acc:
+            return []
+
+        # Check daily drawdown limit
+        daily_loss_dollars = self.daily_start_balance - acc.equity
+        if daily_loss_dollars > (self.daily_start_balance * (self.risk.max_daily_loss_pct / 100.0)):
+            if self.state == BotState.PAPER_AUTO:
+                self.set_state(BotState.PAUSED)
+                self.log_event("RISK_LIMIT", f"حداکثر زیان روزانه ({self.risk.max_daily_loss_pct}%) لمس شد. ربات متوقف گردید.")
+            return []
+
+        # Check consecutive loss cooldown
+        in_cooldown = False
+        if self.cooldown_remaining_bars > 0:
+            self.cooldown_remaining_bars -= 1
+            in_cooldown = True
+            if self.state == BotState.PAPER_AUTO:
+                self.log_event("COOLDOWN_BLOCK", f"کول‌داون پس از زیان فعال است ({self.cooldown_remaining_bars + 1} کندل باقی‌مانده).")
+
+        # Check max open positions
+        open_positions = [
+            p for p in self.broker.positions.values() if p.account_id == self.account_id and p.status.value == "OPEN"
+        ]
+        if len(open_positions) >= self.risk.max_open_positions:
+            return []
+
+        # Check max daily trades
+        if self.today_trades_count >= self.risk.max_daily_trades:
+            if self.state == BotState.PAPER_AUTO:
+                self.log_event("MAX_DAILY_TRADES", f"سقف معاملات روزانه ({self.risk.max_daily_trades}) تکمیل شد.")
+            return []
+
+        # 3. News Blackout Check
+        is_blocked, news_reason = self.engine.calendar.is_blackout(last_candle.timestamp)
+        if is_blocked and self.state == BotState.PAPER_AUTO:
+            self.log_event("NEWS_BLOCK", f"معامله متوقف شد به دلیل: {news_reason}")
+            return []
+
+        # 4. Run Analysis Pipeline
+        self.engine.load_candles(
+            closed_candles, timeframe=self.engine.current_timeframe,
+            require_complete=strict_provider,
+        )
+        self.engine.run_pipeline(allow_pending=True)
+
+        new_signals = [s for s in self.engine.signals if s.signal_index == len(self.engine.current_candles) - 1]
+
+        # 5. Paper Auto Dispatch
+        if self.state == BotState.PAPER_AUTO and new_signals and not in_cooldown:
+            spread = current_ask - current_bid
+            if spread > self.risk.max_spread_pips:
+                self.log_event("SPREAD_FILTER", f"اسپرد جاری (${spread:.2f}) بالاتر از سقف مجاز (${self.risk.max_spread_pips:.2f}) است.")
+                return new_signals
+
+            for sig in new_signals:
+                if len(open_positions) >= self.risk.max_open_positions:
+                    break
+                if self.today_trades_count >= self.risk.max_daily_trades:
+                    break
+
+                # Prevent duplicate order for identical signal
+                sig_key = (sig.setup_id, sig.direction.value, sig.signal_index)
+                if sig_key in self.dispatched_signals:
+                    continue
+
+                # Position sizing based on 0.5% risk
+                risk_dollars = acc.balance * (self.risk.risk_per_trade_pct / 100.0)
+                sl_distance = abs(sig.entry_price - sig.sl_price)
+                if sl_distance <= 0:
+                    continue
+
+                if strict_provider:
+                    # Execution uses current executable Ask for BUY, Bid for SELL,
+                    # not the prior close or backtest next-open proxy.
+                    actual_entry = (current_ask if sig.direction == SignalDirection.BUY
+                                    else current_bid)
+                    sl_distance = abs(actual_entry - sig.sl_price)
+                    if sig.direction == SignalDirection.BUY:
+                        if not sig.sl_price < actual_entry < sig.tp_price:
+                            continue
+                        reward = sig.tp_price - actual_entry
+                    else:
+                        if not sig.tp_price < actual_entry < sig.sl_price:
+                            continue
+                        reward = actual_entry - sig.tp_price
+                    if sl_distance <= 0 or reward / sl_distance < self.risk.min_rr_ratio:
+                        continue
+                calculated_lots = risk_dollars / (sl_distance * acc.contract_size)
+                # Never round UP to the minimum lot if it violates the risk cap.
+                import math
+                lots = math.floor(min(5.0, calculated_lots) * 100) / 100
+                if lots < 0.01:
+                    continue
+
+                direction = OrderDirection.BUY if sig.direction == SignalDirection.BUY else OrderDirection.SELL
+
+                if not self._claim_daily_order_slot():
+                    self.log_event("MAX_DAILY_TRADES", "سقف روزانه ثبت سفارش مجازی تکمیل شد.")
+                    break
+
+                order = self.broker.submit_order(
+                    account_id=self.account_id,
+                    direction=direction,
+                    order_type=OrderType.MARKET,
+                    quantity_lots=lots,
+                    sl_price=sig.sl_price,
+                    tp_price=sig.tp_price,
+                    current_bid=current_bid,
+                    current_ask=current_ask,
+                )
+                if self.state_machine:
+                    self.state_machine.on_order_dispatched(order.order_id, last_candle)
+                self.dispatched_signals.add(sig_key)
+                self.log_event(
+                    "ORDER_DISPATCHED",
+                    f"ارسال سفارش مجازی {direction.value} {lots} لات به استراتژی {sig.setup_name} (سفارش #{order.order_id})",
+                )
+
+        return new_signals

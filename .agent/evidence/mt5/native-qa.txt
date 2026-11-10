@@ -1,0 +1,4 @@
+JG	0	08:15:49.971	Core 01	GLAB_CHECK|PASS|failures=0
+PN	0	08:15:49.971	Core 01	OnTester result 1
+CQ	0	08:15:50.130	Tester	automatic testing finished
+CS	0	08:15:49.969	Tester	0 : mathematical test passed in 0:00:00.055

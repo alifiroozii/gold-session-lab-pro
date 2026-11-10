@@ -1,0 +1,88 @@
+{
+  "split": "validation",
+  "from_inclusive": "2026-01-02",
+  "to_exclusive": "2026-01-10",
+  "source": "simom1/XAUUSD-history",
+  "revision": "5d1bfa39cb8bb3715b027fa33815de7198fb1aca",
+  "replay_sha256": "efcb0bb536d74f591d392afbf2f969b028e75fda2decefe77e89b162a235dfa0",
+  "quote_loader_sha256": "cd827985f8bc12ef279c54161730c58291eb5e87a7e3b5fba6ac5f787770bb56",
+  "native_source_sha256": "b5586cb074ffb3f8c76689b1dee32bd946a5fe0e3a901ce9f00b168fb9b67fe8",
+  "granularity": "tick",
+  "cost_model": {
+    "balance_usd": 1000.0,
+    "round_turn_usd_per_lot": 10.0,
+    "base_slippage_usd_per_oz_per_market_leg": 0.05,
+    "stress_slippage_usd_per_oz_per_market_leg": 0.1
+  },
+  "files": {
+    "xauusd_2026_01_early.parquet": "3a9b9740009655ab5430bdbe9a77e7f41eb37f73"
+  },
+  "quality": {
+    "invalid_ticks": 0
+  },
+  "coverage": {
+    "first": "2026-01-02 00:00:00+00:00",
+    "last": "2026-01-09 21:57:00+00:00",
+    "observed_minutes": 8194,
+    "weekdays_under_1000_minutes": [],
+    "monthly_observed_minutes": {
+      "2026-01": 8194
+    }
+  },
+  "results": {
+    "asia-utc:breakout:fast": {
+      "signals": 34,
+      "base": {
+        "trades": 0,
+        "net": 0.0,
+        "return_pct": 0.0,
+        "profit_factor": null,
+        "win_pct": null,
+        "mean_r": null,
+        "closed_trade_drawdown_pct": 0.0,
+        "longest_losing_streak": 0,
+        "month_net": {},
+        "session_net": {}
+      },
+      "stress": {
+        "trades": 0,
+        "net": 0.0,
+        "return_pct": 0.0,
+        "profit_factor": null,
+        "win_pct": null,
+        "mean_r": null,
+        "closed_trade_drawdown_pct": 0.0,
+        "longest_losing_streak": 0,
+        "month_net": {},
+        "session_net": {}
+      }
+    },
+    "asia-ny:breakout:fast": {
+      "signals": 34,
+      "base": {
+        "trades": 0,
+        "net": 0.0,
+        "return_pct": 0.0,
+        "profit_factor": null,
+        "win_pct": null,
+        "mean_r": null,
+        "closed_trade_drawdown_pct": 0.0,
+        "longest_losing_streak": 0,
+        "month_net": {},
+        "session_net": {}
+      },
+      "stress": {
+        "trades": 0,
+        "net": 0.0,
+        "return_pct": 0.0,
+        "profit_factor": null,
+        "win_pct": null,
+        "mean_r": null,
+        "closed_trade_drawdown_pct": 0.0,
+        "longest_losing_streak": 0,
+        "month_net": {},
+        "session_net": {}
+      }
+    }
+  }
+}

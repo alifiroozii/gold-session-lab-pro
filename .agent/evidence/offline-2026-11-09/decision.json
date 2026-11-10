@@ -1,0 +1,27 @@
+{
+  "champion": null,
+  "holdout_accessed": false,
+  "research_kind": "OFFLINE_M1_SCREEN",
+  "training_variants": 18,
+  "validation_variants": 2,
+  "native_market_backtests": 0,
+  "replay_sha256": "efcb0bb536d74f591d392afbf2f969b028e75fda2decefe77e89b162a235dfa0",
+  "variant_decisions": {
+    "asia-utc:breakout:fast": {
+      "status": "REJECTED",
+      "reasons": [
+        "validation_below_20_trades",
+        "negative_validation_expectancy",
+        "negative_validation_stress_pnl"
+      ]
+    },
+    "asia-ny:breakout:fast": {
+      "status": "REJECTED",
+      "reasons": [
+        "negative_validation_expectancy",
+        "negative_validation_stress_pnl",
+        "stress_drawdown_above_20_pct"
+      ]
+    }
+  }
+}

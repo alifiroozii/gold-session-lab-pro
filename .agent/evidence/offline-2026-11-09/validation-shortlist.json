@@ -1,0 +1,8 @@
+{
+  "method": "Select all variants with >=30 closed training trades and positive stress net. Require >=20 validation trades, positive validation stress net, PF >1 in both base periods, and <=20% stress closed-trade drawdown in both periods to advance. Prefer validation stress expectancy R; use drawdown as tie-breaker. This is a screening gate, separate from the untouched holdout.",
+  "keys": [
+    "asia-utc:breakout:fast",
+    "asia-ny:breakout:fast"
+  ],
+  "training_replay_sha256": "c7a921eebf952ef57ab971a43a73a872dffa662ccb6eeb52bdc58b3193762ddf"
+}

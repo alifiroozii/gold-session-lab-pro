@@ -1,0 +1,22 @@
+Experiment_ID,Description,Trades,Wins,Losses,WinRate,NetProfit,ProfitFactor,MaxDrawdownPct,EquityDrawdownPct,ExpectedPayoff,SharpeRatio
+Stage2_Bal_Baseline,"Balanced Baseline (London 08-09, Candle>=0.45, BOS/Trend)",209,92,117,44.0,938.4,1.15,38.87,44.43,4.49,5.73
+Stage2_Hvy_Baseline,"Heavy Baseline (London 08-09, FVG, BOS, Vol>=1.10)",76,35,41,46.1,465.5,1.24,18.99,38.13,6.13,8.69
+Stage2_Bal_Retest,Balanced + Retest Confirmation,11,7,4,63.6,222.4,2.4,9.74,12.55,20.22,11.26
+Stage2_Hvy_Retest,Heavy + Retest Confirmation,76,35,41,46.1,465.5,1.24,18.99,38.13,6.13,8.69
+Stage2_Bal_ATR_Bounds,Balanced + ATR Bounds Filter (0.50-2.50 ATR),203,91,112,44.8,-116.6,0.98,57.81,60.23,-0.57,-1.14
+Stage2_Hvy_ATR_Bounds,Heavy + ATR Bounds Filter (0.50-2.50 ATR),72,34,38,47.2,851.5,1.56,15.65,24.74,11.83,18.8
+Stage2_Bal_Close_Loc,Balanced + Candle Close in Extreme 25%,182,80,102,44.0,607.2,1.1,50.76,55.16,3.34,4.26
+Stage2_Hvy_Close_Loc,Heavy + Candle Close in Extreme 25%,76,35,41,46.1,465.5,1.24,18.99,38.13,6.13,8.69
+Stage2_Bal_Range_Width,Balanced + Asian Range Width <= 30 pts,105,53,52,50.5,414.9,1.2,23.08,23.28,3.95,10.24
+Stage2_Hvy_Range_Width,Heavy + Asian Range Width <= 30 pts,45,18,27,40.0,-223.5,0.77,33.24,35.93,-4.97,-5.0
+Stage2_Hvy_Vol_125,Heavy + Tick Volume >= 1.25x,49,25,24,51.0,462.6,1.42,21.24,25.47,9.44,16.42
+Stage2_Hvy_Vol_140,Heavy + Tick Volume >= 1.40x,31,15,16,48.4,234.9,1.31,19.2,27.93,7.58,13.41
+Stage2_Hvy_FVG_035,Heavy + FVG Gap >= $0.35,74,35,39,47.3,493.1,1.26,18.7,37.54,6.66,9.3
+Stage2_Hvy_FVG_050,Heavy + FVG Gap >= $0.50,70,34,36,48.6,621.4,1.35,17.48,35.03,8.88,12.14
+Stage2_Hvy_Sweep_Bonus,Heavy + Opposing Asian Sweep Confirmed,8,3,5,37.5,-68.4,0.71,18.32,20.77,-8.55,-2.72
+Stage2_Bal_Win_08_10,Balanced + Window London 08-10,267,118,149,44.2,2134.2,1.26,31.15,37.14,7.99,8.54
+Stage2_Bal_Win_08_11,Balanced + Window London 08-11,301,133,168,44.2,1955.0,1.21,32.16,36.7,6.5,8.12
+Stage2_Hvy_Win_08_10,Heavy + Window London 08-10,127,60,67,47.2,1500.6,1.45,20.12,28.43,11.82,14.78
+Stage2_Hvy_Win_08_11,Heavy + Window London 08-11,157,72,85,45.9,1459.8,1.34,21.34,32.32,9.3,12.09
+Stage2_Bal_SLTP_ATR,Balanced + Volatility ATR SL/TP (1.5x / 2.0x),209,78,131,37.3,286.7,1.03,70.77,71.92,1.37,1.11
+Stage2_Hvy_SLTP_ATR,Heavy + Volatility ATR SL/TP (1.5x / 2.0x),76,33,43,43.4,2382.5,1.98,16.94,22.74,31.35,21.19

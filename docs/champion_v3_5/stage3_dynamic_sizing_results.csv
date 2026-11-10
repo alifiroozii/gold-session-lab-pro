@@ -1,0 +1,13 @@
+Model,SizingMode,RiskPct,Trades,NetProfit,ProfitFactor,MaxDrawdownPct,WinRate,ExpectedPayoff
+Balanced Optimized,Fixed Lot 0.10,Fixed 0.10 Lot,267,2134.2,1.26,31.15,44.2,7.99
+Heavy Optimized,Fixed Lot 0.10,Fixed 0.10 Lot,118,1712.2,1.64,13.48,48.3,14.51
+Balanced Optimized,Dynamic Risk (Equity),0.25%,91,-11.11,0.91,2.77,40.7,-0.12
+Heavy Optimized,Dynamic Risk (Equity),0.25%,38,-9.75,0.81,1.87,39.5,-0.26
+Balanced Optimized,Dynamic Risk (Equity),0.5%,225,37.75,1.07,6.59,44.0,0.17
+Heavy Optimized,Dynamic Risk (Equity),0.5%,93,0.98,1.0,3.47,43.0,0.01
+Balanced Optimized,Dynamic Risk (Equity),1.0%,258,157.04,1.12,12.07,44.2,0.61
+Heavy Optimized,Dynamic Risk (Equity),1.0%,113,101.19,1.18,8.13,46.9,0.9
+Balanced Optimized,Dynamic Risk (Equity),1.5%,266,90.47,1.04,24.48,42.9,0.34
+Heavy Optimized,Dynamic Risk (Equity),1.5%,117,230.26,1.23,14.43,47.9,1.97
+Balanced Optimized,Dynamic Risk (Equity),2.0%,266,273.09,1.08,24.5,43.6,1.03
+Heavy Optimized,Dynamic Risk (Equity),2.0%,118,330.99,1.22,17.55,48.3,2.81

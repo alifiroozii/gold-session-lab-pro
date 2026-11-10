@@ -1,0 +1,172 @@
+{
+  "split": "validation",
+  "from_inclusive": "2025-11-01",
+  "to_exclusive": "2026-05-01",
+  "source": "kevingtlin/Market-Data-Lab",
+  "revision": "b60bd71d0e34a42cb962daf688ff252e73f409ca",
+  "replay_sha256": "efcb0bb536d74f591d392afbf2f969b028e75fda2decefe77e89b162a235dfa0",
+  "quote_loader_sha256": "cd827985f8bc12ef279c54161730c58291eb5e87a7e3b5fba6ac5f787770bb56",
+  "native_source_sha256": "b5586cb074ffb3f8c76689b1dee32bd946a5fe0e3a901ce9f00b168fb9b67fe8",
+  "granularity": "m1",
+  "cost_model": {
+    "balance_usd": 1000.0,
+    "round_turn_usd_per_lot": 10.0,
+    "base_slippage_usd_per_oz_per_market_leg": 0.05,
+    "stress_slippage_usd_per_oz_per_market_leg": 0.1
+  },
+  "files": {
+    "xauusd_ask_m1_2024_10.csv": "3f504476f60eb301cb11b3489363845f2ca348d5",
+    "xauusd_ask_m1_2024_11.csv": "7b82e0d81d971ef90aed91d40caab580ea123202",
+    "xauusd_ask_m1_2024_12.csv": "968296820377aa553ef831cf7faf17dfacf227a8",
+    "xauusd_ask_m1_2025_01.csv": "0c4259264dc500f708afb8d4d1e6957784905828",
+    "xauusd_ask_m1_2025_02.csv": "7f79e223bd3aa7eced38c40ce4878894cfb63b52",
+    "xauusd_ask_m1_2025_03.csv": "722fb80a08dbd2dd752fd4db98143d3584dbec52",
+    "xauusd_ask_m1_2025_04.csv": "a7a1b04849f88708aea270fd5ba09588bc7b435a",
+    "xauusd_ask_m1_2025_05.csv": "757914bda7c25b568976f55fca615e180d3e75a4",
+    "xauusd_ask_m1_2025_06.csv": "06a264ccf5b942c88c3a371956fd2ff0c31b219c",
+    "xauusd_ask_m1_2025_07.csv": "2d738d2202e18537895b3d700f68ad888cc759ae",
+    "xauusd_ask_m1_2025_08.csv": "669b0f2b41f6180827facbcd33b1c30c231562d6",
+    "xauusd_ask_m1_2025_09.csv": "c349a56f02eb55270fb871376fa1d7b03f2b6331",
+    "xauusd_ask_m1_2025_10.csv": "420cae63b4b9923588ed0e213a92e8c86304cc7f",
+    "xauusd_ask_m1_2025_11.csv": "9bd64f838c2b2298d90349d2cd7362b788036d40",
+    "xauusd_ask_m1_2025_12.csv": "f01c42dedbabc07a312bda031366ed5a37694b89",
+    "xauusd_ask_m1_2026_01.csv": "21e40134678174476f9070cc36d99b2abff23d6f",
+    "xauusd_ask_m1_2026_02.csv": "05572e3993ec7af48aea1570d74ce4b43f8a7167",
+    "xauusd_ask_m1_2026_03.csv": "57d768e40ffb53d7f14d45f6ecb87010191a9ba9",
+    "xauusd_ask_m1_2026_04.csv": "27cc91ab3944eb320a926503889d85b4317d997f",
+    "xauusd_bid_m1_2024_10.csv": "ab734d9cea86c2441b2592e6aa0537829bd093f5",
+    "xauusd_bid_m1_2024_11.csv": "4fe07a39a96512d4264202d4817fafedb3b97e79",
+    "xauusd_bid_m1_2024_12.csv": "a5a219ccee1e3808593f349a56274d6242fe31dd",
+    "xauusd_bid_m1_2025_01.csv": "f0211e901b6f8b26996ba1a48aeba73f599bd5fe",
+    "xauusd_bid_m1_2025_02.csv": "e3beb3def6e2502975046d07f43db777604110b2",
+    "xauusd_bid_m1_2025_03.csv": "fefe437f1f5b7565ca3cf10c10c60a63edf527ef",
+    "xauusd_bid_m1_2025_04.csv": "aff4975ce8522f28951940db2daff3f36d5b3155",
+    "xauusd_bid_m1_2025_05.csv": "6470db6ad153edb9bffd41660d0ae9b4370e4662",
+    "xauusd_bid_m1_2025_06.csv": "b21e4764f19340da04b524f228264ff907d818f0",
+    "xauusd_bid_m1_2025_07.csv": "f832021fb3a42d7299830d5420c241d75977293d",
+    "xauusd_bid_m1_2025_08.csv": "57eb33cd0e3216612f20bdd24ffcb380a8950fb6",
+    "xauusd_bid_m1_2025_09.csv": "d9d02b8459d59e624fb10eaf5ee8eed3c8e71a32",
+    "xauusd_bid_m1_2025_10.csv": "2abab9482acf9a1612d2270a8c154ef29d7cfa76",
+    "xauusd_bid_m1_2025_11.csv": "d352855e8e795e8b63bd0061fe49bf36976bbe14",
+    "xauusd_bid_m1_2025_12.csv": "48b6a35faefba150cc05b7bf9ae849e90af2b3d5",
+    "xauusd_bid_m1_2026_01.csv": "e94768e8723896c4564085d308bff773384b0b0d",
+    "xauusd_bid_m1_2026_02.csv": "7a4190c519c665e9b0381a72e1ce2763a7759c11",
+    "xauusd_bid_m1_2026_03.csv": "68e025d16d184b12a78505a30efc05564f6b5d2b",
+    "xauusd_bid_m1_2026_04.csv": "ffe75abc4fda834b9368c7b25687e4e0f2e1baec"
+  },
+  "quality": {
+    "unmatched_minutes": 0,
+    "invalid_minutes": 0,
+    "flat_minutes_excluded": 271760
+  },
+  "coverage": {
+    "first": "2025-11-02 23:00:00+00:00",
+    "last": "2026-04-30 23:59:00+00:00",
+    "observed_minutes": 173122,
+    "weekdays_under_1000_minutes": [
+      "2025-12-25",
+      "2026-01-01",
+      "2026-04-03"
+    ],
+    "monthly_observed_minutes": {
+      "2025-11": 27355,
+      "2025-12": 30061,
+      "2026-01": 28828,
+      "2026-02": 27426,
+      "2026-03": 30475,
+      "2026-04": 28977
+    }
+  },
+  "results": {
+    "asia-utc:breakout:fast": {
+      "signals": 417,
+      "base": {
+        "trades": 8,
+        "net": -51.79,
+        "return_pct": -5.18,
+        "profit_factor": 0.6018,
+        "win_pct": 37.5,
+        "mean_r": -0.0938,
+        "closed_trade_drawdown_pct": 7.75,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2025-11": -52.71,
+          "2025-12": 47.97,
+          "2026-01": -47.06
+        },
+        "session_net": {
+          "london": -52.71,
+          "new-york": -14.68,
+          "overlap": 15.6
+        }
+      },
+      "stress": {
+        "trades": 8,
+        "net": -54.54,
+        "return_pct": -5.45,
+        "profit_factor": 0.5879,
+        "win_pct": 37.5,
+        "mean_r": -0.1081,
+        "closed_trade_drawdown_pct": 7.9,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2025-11": -53.71,
+          "2025-12": 47.07,
+          "2026-01": -47.91
+        },
+        "session_net": {
+          "london": -53.71,
+          "new-york": -15.83,
+          "overlap": 15.0
+        }
+      }
+    },
+    "asia-ny:breakout:fast": {
+      "signals": 1255,
+      "base": {
+        "trades": 29,
+        "net": -254.29,
+        "return_pct": -25.43,
+        "profit_factor": 0.3963,
+        "win_pct": 27.59,
+        "mean_r": -0.3209,
+        "closed_trade_drawdown_pct": 25.43,
+        "longest_losing_streak": 8,
+        "month_net": {
+          "2025-11": -110.15,
+          "2025-12": -43.88,
+          "2026-01": -52.85,
+          "2026-02": -43.69,
+          "2026-04": -3.72
+        },
+        "session_net": {
+          "london": -76.65,
+          "new-york": -117.85,
+          "overlap": -59.79
+        }
+      },
+      "stress": {
+        "trades": 28,
+        "net": -285.9,
+        "return_pct": -28.59,
+        "profit_factor": 0.3331,
+        "win_pct": 25.0,
+        "mean_r": -0.3954,
+        "closed_trade_drawdown_pct": 28.59,
+        "longest_losing_streak": 8,
+        "month_net": {
+          "2025-11": -112.24,
+          "2025-12": -46.73,
+          "2026-01": -60.47,
+          "2026-02": -51.76,
+          "2026-04": -14.71
+        },
+        "session_net": {
+          "london": -89.94,
+          "new-york": -133.48,
+          "overlap": -62.49
+        }
+      }
+    }
+  }
+}

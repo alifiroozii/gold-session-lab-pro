@@ -1,0 +1,36 @@
+[
+  {
+    "split": "training",
+    "reference": "asia-utc",
+    "weekdays_with_eligible_range": 178
+  },
+  {
+    "split": "training",
+    "reference": "asia-ny",
+    "weekdays_with_eligible_range": 200
+  },
+  {
+    "split": "training",
+    "reference": "asia-utc",
+    "complete_weekday_ranges": 258,
+    "median_width_usd": 23.07,
+    "above_30_usd": 80
+  },
+  {
+    "split": "validation",
+    "reference": "asia-utc",
+    "weekdays_with_eligible_range": 15
+  },
+  {
+    "split": "validation",
+    "reference": "asia-ny",
+    "weekdays_with_eligible_range": 34
+  },
+  {
+    "split": "validation",
+    "reference": "asia-utc",
+    "complete_weekday_ranges": 126,
+    "median_width_usd": 51.46,
+    "above_30_usd": 111
+  }
+]

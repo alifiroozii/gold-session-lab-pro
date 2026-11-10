@@ -1,0 +1,968 @@
+{
+  "split": "training",
+  "from_inclusive": "2024-11-01",
+  "to_exclusive": "2025-11-01",
+  "source": "kevingtlin/Market-Data-Lab",
+  "revision": "b60bd71d0e34a42cb962daf688ff252e73f409ca",
+  "replay_sha256": "efcb0bb536d74f591d392afbf2f969b028e75fda2decefe77e89b162a235dfa0",
+  "quote_loader_sha256": "cd827985f8bc12ef279c54161730c58291eb5e87a7e3b5fba6ac5f787770bb56",
+  "native_source_sha256": "b5586cb074ffb3f8c76689b1dee32bd946a5fe0e3a901ce9f00b168fb9b67fe8",
+  "granularity": "m1",
+  "cost_model": {
+    "balance_usd": 1000.0,
+    "round_turn_usd_per_lot": 10.0,
+    "base_slippage_usd_per_oz_per_market_leg": 0.05,
+    "stress_slippage_usd_per_oz_per_market_leg": 0.1
+  },
+  "files": {
+    "xauusd_ask_m1_2024_10.csv": "3f504476f60eb301cb11b3489363845f2ca348d5",
+    "xauusd_ask_m1_2024_11.csv": "7b82e0d81d971ef90aed91d40caab580ea123202",
+    "xauusd_ask_m1_2024_12.csv": "968296820377aa553ef831cf7faf17dfacf227a8",
+    "xauusd_ask_m1_2025_01.csv": "0c4259264dc500f708afb8d4d1e6957784905828",
+    "xauusd_ask_m1_2025_02.csv": "7f79e223bd3aa7eced38c40ce4878894cfb63b52",
+    "xauusd_ask_m1_2025_03.csv": "722fb80a08dbd2dd752fd4db98143d3584dbec52",
+    "xauusd_ask_m1_2025_04.csv": "a7a1b04849f88708aea270fd5ba09588bc7b435a",
+    "xauusd_ask_m1_2025_05.csv": "757914bda7c25b568976f55fca615e180d3e75a4",
+    "xauusd_ask_m1_2025_06.csv": "06a264ccf5b942c88c3a371956fd2ff0c31b219c",
+    "xauusd_ask_m1_2025_07.csv": "2d738d2202e18537895b3d700f68ad888cc759ae",
+    "xauusd_ask_m1_2025_08.csv": "669b0f2b41f6180827facbcd33b1c30c231562d6",
+    "xauusd_ask_m1_2025_09.csv": "c349a56f02eb55270fb871376fa1d7b03f2b6331",
+    "xauusd_ask_m1_2025_10.csv": "420cae63b4b9923588ed0e213a92e8c86304cc7f",
+    "xauusd_ask_m1_2025_11.csv": "9bd64f838c2b2298d90349d2cd7362b788036d40",
+    "xauusd_ask_m1_2025_12.csv": "f01c42dedbabc07a312bda031366ed5a37694b89",
+    "xauusd_ask_m1_2026_01.csv": "21e40134678174476f9070cc36d99b2abff23d6f",
+    "xauusd_ask_m1_2026_02.csv": "05572e3993ec7af48aea1570d74ce4b43f8a7167",
+    "xauusd_ask_m1_2026_03.csv": "57d768e40ffb53d7f14d45f6ecb87010191a9ba9",
+    "xauusd_ask_m1_2026_04.csv": "27cc91ab3944eb320a926503889d85b4317d997f",
+    "xauusd_bid_m1_2024_10.csv": "ab734d9cea86c2441b2592e6aa0537829bd093f5",
+    "xauusd_bid_m1_2024_11.csv": "4fe07a39a96512d4264202d4817fafedb3b97e79",
+    "xauusd_bid_m1_2024_12.csv": "a5a219ccee1e3808593f349a56274d6242fe31dd",
+    "xauusd_bid_m1_2025_01.csv": "f0211e901b6f8b26996ba1a48aeba73f599bd5fe",
+    "xauusd_bid_m1_2025_02.csv": "e3beb3def6e2502975046d07f43db777604110b2",
+    "xauusd_bid_m1_2025_03.csv": "fefe437f1f5b7565ca3cf10c10c60a63edf527ef",
+    "xauusd_bid_m1_2025_04.csv": "aff4975ce8522f28951940db2daff3f36d5b3155",
+    "xauusd_bid_m1_2025_05.csv": "6470db6ad153edb9bffd41660d0ae9b4370e4662",
+    "xauusd_bid_m1_2025_06.csv": "b21e4764f19340da04b524f228264ff907d818f0",
+    "xauusd_bid_m1_2025_07.csv": "f832021fb3a42d7299830d5420c241d75977293d",
+    "xauusd_bid_m1_2025_08.csv": "57eb33cd0e3216612f20bdd24ffcb380a8950fb6",
+    "xauusd_bid_m1_2025_09.csv": "d9d02b8459d59e624fb10eaf5ee8eed3c8e71a32",
+    "xauusd_bid_m1_2025_10.csv": "2abab9482acf9a1612d2270a8c154ef29d7cfa76",
+    "xauusd_bid_m1_2025_11.csv": "d352855e8e795e8b63bd0061fe49bf36976bbe14",
+    "xauusd_bid_m1_2025_12.csv": "48b6a35faefba150cc05b7bf9ae849e90af2b3d5",
+    "xauusd_bid_m1_2026_01.csv": "e94768e8723896c4564085d308bff773384b0b0d",
+    "xauusd_bid_m1_2026_02.csv": "7a4190c519c665e9b0381a72e1ce2763a7759c11",
+    "xauusd_bid_m1_2026_03.csv": "68e025d16d184b12a78505a30efc05564f6b5d2b",
+    "xauusd_bid_m1_2026_04.csv": "ffe75abc4fda834b9368c7b25687e4e0f2e1baec"
+  },
+  "quality": {
+    "unmatched_minutes": 0,
+    "invalid_minutes": 0,
+    "flat_minutes_excluded": 271760
+  },
+  "coverage": {
+    "first": "2024-11-01 00:00:00+00:00",
+    "last": "2025-10-31 20:59:00+00:00",
+    "observed_minutes": 354333,
+    "weekdays_under_1000_minutes": [
+      "2024-12-25",
+      "2025-01-01",
+      "2025-04-18"
+    ],
+    "monthly_observed_minutes": {
+      "2024-11": 28568,
+      "2024-12": 28760,
+      "2025-01": 30195,
+      "2025-02": 27440,
+      "2025-03": 29090,
+      "2025-04": 28950,
+      "2025-05": 30086,
+      "2025-06": 28948,
+      "2025-07": 31499,
+      "2025-08": 28968,
+      "2025-09": 30209,
+      "2025-10": 31620
+    }
+  },
+  "results": {
+    "asia-utc:breakout:fast": {
+      "signals": 5935,
+      "base": {
+        "trades": 51,
+        "net": 231.87,
+        "return_pct": 23.19,
+        "profit_factor": 1.3617,
+        "win_pct": 49.02,
+        "mean_r": 0.1506,
+        "closed_trade_drawdown_pct": 8.13,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-11": -23.12,
+          "2024-12": 10.93,
+          "2025-01": 44.37,
+          "2025-02": -60.63,
+          "2025-03": 142.2,
+          "2025-05": 41.07,
+          "2025-06": 25.37,
+          "2025-07": 28.72,
+          "2025-08": 0.78,
+          "2025-09": -36.98,
+          "2025-10": 59.15
+        },
+        "session_net": {
+          "overlap": 106.87,
+          "london": 9.35,
+          "new-york": 115.65
+        }
+      },
+      "stress": {
+        "trades": 51,
+        "net": 208.5,
+        "return_pct": 20.85,
+        "profit_factor": 1.3209,
+        "win_pct": 49.02,
+        "mean_r": 0.133,
+        "closed_trade_drawdown_pct": 8.6,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-11": -28.47,
+          "2024-12": 10.09,
+          "2025-01": 43.42,
+          "2025-02": -62.43,
+          "2025-03": 132.31,
+          "2025-05": 40.77,
+          "2025-06": 23.67,
+          "2025-07": 26.08,
+          "2025-08": -1.12,
+          "2025-09": -38.83,
+          "2025-10": 63.03
+        },
+        "session_net": {
+          "overlap": 87.27,
+          "london": 2.3,
+          "new-york": 118.93
+        }
+      }
+    },
+    "asia-utc:breakout:standard": {
+      "signals": 2387,
+      "base": {
+        "trades": 21,
+        "net": -50.64,
+        "return_pct": -5.06,
+        "profit_factor": 0.8311,
+        "win_pct": 38.1,
+        "mean_r": -0.1175,
+        "closed_trade_drawdown_pct": 11.23,
+        "longest_losing_streak": 5,
+        "month_net": {
+          "2024-11": -1.31,
+          "2025-01": -26.48,
+          "2025-02": -37.98,
+          "2025-03": -18.15,
+          "2025-05": 34.22,
+          "2025-06": 49.34,
+          "2025-07": 4.2,
+          "2025-08": -2.85,
+          "2025-09": -47.48,
+          "2025-10": -4.16
+        },
+        "session_net": {
+          "overlap": -22.04,
+          "london": -61.73,
+          "new-york": 33.13
+        }
+      },
+      "stress": {
+        "trades": 21,
+        "net": -60.03,
+        "return_pct": -6.0,
+        "profit_factor": 0.8042,
+        "win_pct": 38.1,
+        "mean_r": -0.1368,
+        "closed_trade_drawdown_pct": 12.09,
+        "longest_losing_streak": 5,
+        "month_net": {
+          "2024-11": -2.91,
+          "2025-01": -26.98,
+          "2025-02": -39.18,
+          "2025-03": -18.75,
+          "2025-05": 33.97,
+          "2025-06": 48.39,
+          "2025-07": 3.3,
+          "2025-08": -4.05,
+          "2025-09": -48.37,
+          "2025-10": -5.46
+        },
+        "session_net": {
+          "overlap": -26.08,
+          "london": -65.78,
+          "new-york": 31.83
+        }
+      }
+    },
+    "asia-utc:breakout:conservative": {
+      "signals": 68,
+      "base": {
+        "trades": 6,
+        "net": -44.86,
+        "return_pct": -4.49,
+        "profit_factor": 0.5128,
+        "win_pct": 33.33,
+        "mean_r": -0.2192,
+        "closed_trade_drawdown_pct": 6.36,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2024-11": -20.48,
+          "2025-02": 27.21,
+          "2025-07": -28.29,
+          "2025-09": -23.3
+        },
+        "session_net": {
+          "overlap": -16.57,
+          "london": -28.29
+        }
+      },
+      "stress": {
+        "trades": 6,
+        "net": -47.35,
+        "return_pct": -4.74,
+        "profit_factor": 0.4961,
+        "win_pct": 33.33,
+        "mean_r": -0.2398,
+        "closed_trade_drawdown_pct": 6.58,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2024-11": -21.78,
+          "2025-02": 26.91,
+          "2025-07": -28.89,
+          "2025-09": -23.59
+        },
+        "session_net": {
+          "overlap": -18.46,
+          "london": -28.89
+        }
+      }
+    },
+    "asia-utc:sweep:fast": {
+      "signals": 473,
+      "base": {
+        "trades": 50,
+        "net": -250.8,
+        "return_pct": -25.08,
+        "profit_factor": 0.6409,
+        "win_pct": 36.0,
+        "mean_r": -0.2658,
+        "closed_trade_drawdown_pct": 30.56,
+        "longest_losing_streak": 7,
+        "month_net": {
+          "2024-11": -6.6,
+          "2024-12": -41.38,
+          "2025-01": -145.21,
+          "2025-02": 126.12,
+          "2025-03": -121.87,
+          "2025-05": 64.73,
+          "2025-06": -107.35,
+          "2025-07": 33.61,
+          "2025-08": -23.23,
+          "2025-09": -34.66,
+          "2025-10": 5.01
+        },
+        "session_net": {
+          "overlap": -246.11,
+          "new-york": -59.3,
+          "london": 54.61
+        }
+      },
+      "stress": {
+        "trades": 50,
+        "net": -267.82,
+        "return_pct": -26.78,
+        "profit_factor": 0.6191,
+        "win_pct": 36.0,
+        "mean_r": -0.2857,
+        "closed_trade_drawdown_pct": 32.34,
+        "longest_losing_streak": 7,
+        "month_net": {
+          "2024-11": -12.79,
+          "2024-12": -44.68,
+          "2025-01": -148.51,
+          "2025-02": 124.82,
+          "2025-03": -124.27,
+          "2025-05": 57.41,
+          "2025-06": -108.04,
+          "2025-07": 32.86,
+          "2025-08": -18.98,
+          "2025-09": -35.76,
+          "2025-10": 10.12
+        },
+        "session_net": {
+          "overlap": -245.36,
+          "new-york": -70.47,
+          "london": 48.01
+        }
+      }
+    },
+    "asia-utc:sweep:standard": {
+      "signals": 84,
+      "base": {
+        "trades": 14,
+        "net": -16.68,
+        "return_pct": -1.67,
+        "profit_factor": 0.9182,
+        "win_pct": 42.86,
+        "mean_r": -0.0465,
+        "closed_trade_drawdown_pct": 8.0,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-11": 38.32,
+          "2024-12": 8.34,
+          "2025-01": -44.02,
+          "2025-02": 66.18,
+          "2025-03": -81.26,
+          "2025-05": 36.47,
+          "2025-07": 10.93,
+          "2025-08": -27.87,
+          "2025-09": -23.78
+        },
+        "session_net": {
+          "london": 120.68,
+          "overlap": -89.85,
+          "new-york": -47.51
+        }
+      },
+      "stress": {
+        "trades": 14,
+        "net": -22.63,
+        "return_pct": -2.26,
+        "profit_factor": 0.8912,
+        "win_pct": 42.86,
+        "mean_r": -0.063,
+        "closed_trade_drawdown_pct": 8.33,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-11": 38.08,
+          "2024-12": 7.74,
+          "2025-01": -45.22,
+          "2025-02": 65.58,
+          "2025-03": -82.75,
+          "2025-05": 36.17,
+          "2025-07": 10.33,
+          "2025-08": -28.47,
+          "2025-09": -24.08
+        },
+        "session_net": {
+          "london": 118.93,
+          "overlap": -93.15,
+          "new-york": -48.41
+        }
+      }
+    },
+    "asia-utc:sweep:conservative": {
+      "signals": 3,
+      "base": {
+        "trades": 2,
+        "net": -9.26,
+        "return_pct": -0.93,
+        "profit_factor": 0.5621,
+        "win_pct": 50.0,
+        "mean_r": -0.2513,
+        "closed_trade_drawdown_pct": 2.09,
+        "longest_losing_streak": 1,
+        "month_net": {
+          "2024-11": 11.89,
+          "2024-12": -21.15
+        },
+        "session_net": {
+          "overlap": 11.89,
+          "london": -21.15
+        }
+      },
+      "stress": {
+        "trades": 2,
+        "net": -10.16,
+        "return_pct": -1.02,
+        "profit_factor": 0.5328,
+        "win_pct": 50.0,
+        "mean_r": -0.271,
+        "closed_trade_drawdown_pct": 2.15,
+        "longest_losing_streak": 1,
+        "month_net": {
+          "2024-11": 11.59,
+          "2024-12": -21.75
+        },
+        "session_net": {
+          "overlap": 11.59,
+          "london": -21.75
+        }
+      }
+    },
+    "asia-utc:range:fast": {
+      "signals": 132,
+      "base": {
+        "trades": 17,
+        "net": -130.81,
+        "return_pct": -13.08,
+        "profit_factor": 0.5582,
+        "win_pct": 23.53,
+        "mean_r": -0.321,
+        "closed_trade_drawdown_pct": 13.98,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-11": -20.91,
+          "2024-12": 28.83,
+          "2025-02": -48.1,
+          "2025-03": -19.89,
+          "2025-04": 10.08,
+          "2025-06": -49.31,
+          "2025-08": -10.57,
+          "2025-09": -0.69,
+          "2025-10": -20.25
+        },
+        "session_net": {
+          "overlap": -110.14,
+          "new-york": -15.5,
+          "london": -5.17
+        }
+      },
+      "stress": {
+        "trades": 17,
+        "net": -139.36,
+        "return_pct": -13.94,
+        "profit_factor": 0.5408,
+        "win_pct": 23.53,
+        "mean_r": -0.3428,
+        "closed_trade_drawdown_pct": 14.6,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-11": -21.51,
+          "2024-12": 28.53,
+          "2025-02": -49.3,
+          "2025-03": -20.49,
+          "2025-04": 8.78,
+          "2025-06": -50.31,
+          "2025-08": -12.01,
+          "2025-09": -2.19,
+          "2025-10": -20.85
+        },
+        "session_net": {
+          "overlap": -112.94,
+          "new-york": -17.65,
+          "london": -8.77
+        }
+      }
+    },
+    "asia-utc:range:standard": {
+      "signals": 10,
+      "base": {
+        "trades": 1,
+        "net": -20.91,
+        "return_pct": -2.09,
+        "profit_factor": 0.0,
+        "win_pct": 0.0,
+        "mean_r": -0.9721,
+        "closed_trade_drawdown_pct": 2.09,
+        "longest_losing_streak": 1,
+        "month_net": {
+          "2024-11": -20.91
+        },
+        "session_net": {
+          "overlap": -20.91
+        }
+      },
+      "stress": {
+        "trades": 1,
+        "net": -21.51,
+        "return_pct": -2.15,
+        "profit_factor": 0.0,
+        "win_pct": 0.0,
+        "mean_r": -1.0,
+        "closed_trade_drawdown_pct": 2.15,
+        "longest_losing_streak": 1,
+        "month_net": {
+          "2024-11": -21.51
+        },
+        "session_net": {
+          "overlap": -21.51
+        }
+      }
+    },
+    "asia-utc:range:conservative": {
+      "signals": 4,
+      "base": {
+        "trades": 2,
+        "net": -45.52,
+        "return_pct": -4.55,
+        "profit_factor": 0.0,
+        "win_pct": 0.0,
+        "mean_r": -0.9779,
+        "closed_trade_drawdown_pct": 4.55,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2025-08": -20.55,
+          "2025-09": -24.97
+        },
+        "session_net": {
+          "london": -20.55,
+          "overlap": -24.97
+        }
+      },
+      "stress": {
+        "trades": 2,
+        "net": -46.52,
+        "return_pct": -4.65,
+        "profit_factor": 0.0,
+        "win_pct": 0.0,
+        "mean_r": -1.0,
+        "closed_trade_drawdown_pct": 4.65,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2025-08": -21.15,
+          "2025-09": -25.37
+        },
+        "session_net": {
+          "london": -21.15,
+          "overlap": -25.37
+        }
+      }
+    },
+    "asia-ny:breakout:fast": {
+      "signals": 8139,
+      "base": {
+        "trades": 62,
+        "net": 224.01,
+        "return_pct": 22.4,
+        "profit_factor": 1.2885,
+        "win_pct": 48.39,
+        "mean_r": 0.1426,
+        "closed_trade_drawdown_pct": 14.64,
+        "longest_losing_streak": 5,
+        "month_net": {
+          "2024-11": 73.48,
+          "2024-12": 48.11,
+          "2025-01": -27.04,
+          "2025-02": -97.63,
+          "2025-03": 79.44,
+          "2025-04": -69.33,
+          "2025-05": 53.66,
+          "2025-06": 83.27,
+          "2025-07": -11.85,
+          "2025-08": 61.4,
+          "2025-09": -28.64,
+          "2025-10": 59.15
+        },
+        "session_net": {
+          "overlap": 139.01,
+          "london": 79.25,
+          "new-york": 5.75
+        }
+      },
+      "stress": {
+        "trades": 62,
+        "net": 195.98,
+        "return_pct": 19.6,
+        "profit_factor": 1.2485,
+        "win_pct": 48.39,
+        "mean_r": 0.1245,
+        "closed_trade_drawdown_pct": 15.19,
+        "longest_losing_streak": 5,
+        "month_net": {
+          "2024-11": 67.93,
+          "2024-12": 46.01,
+          "2025-01": -28.74,
+          "2025-02": -99.93,
+          "2025-03": 77.99,
+          "2025-04": -71.13,
+          "2025-05": 52.56,
+          "2025-06": 72.67,
+          "2025-07": -14.25,
+          "2025-08": 59.7,
+          "2025-09": -29.83,
+          "2025-10": 63.03
+        },
+        "session_net": {
+          "overlap": 116.56,
+          "london": 72.15,
+          "new-york": 7.28
+        }
+      }
+    },
+    "asia-ny:breakout:standard": {
+      "signals": 3037,
+      "base": {
+        "trades": 25,
+        "net": 105.84,
+        "return_pct": 10.58,
+        "profit_factor": 1.3407,
+        "win_pct": 52.0,
+        "mean_r": 0.2082,
+        "closed_trade_drawdown_pct": 9.03,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-11": 50.34,
+          "2024-12": 48.84,
+          "2025-01": -31.77,
+          "2025-02": -45.76,
+          "2025-03": 42.55,
+          "2025-04": -22.77,
+          "2025-05": 16.2,
+          "2025-06": 89.2,
+          "2025-08": -2.37,
+          "2025-09": -28.64,
+          "2025-10": -9.99
+        },
+        "session_net": {
+          "overlap": 89.76,
+          "london": -1.41,
+          "new-york": 17.48
+        }
+      },
+      "stress": {
+        "trades": 25,
+        "net": 87.79,
+        "return_pct": 8.78,
+        "profit_factor": 1.2765,
+        "win_pct": 52.0,
+        "mean_r": 0.1905,
+        "closed_trade_drawdown_pct": 9.25,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-11": 49.74,
+          "2024-12": 48.24,
+          "2025-01": -32.37,
+          "2025-02": -46.96,
+          "2025-03": 41.35,
+          "2025-04": -23.37,
+          "2025-05": 15.3,
+          "2025-06": 80.65,
+          "2025-08": -3.57,
+          "2025-09": -29.83,
+          "2025-10": -11.38
+        },
+        "session_net": {
+          "overlap": 77.71,
+          "london": -4.6,
+          "new-york": 14.69
+        }
+      }
+    },
+    "asia-ny:breakout:conservative": {
+      "signals": 87,
+      "base": {
+        "trades": 6,
+        "net": -58.68,
+        "return_pct": -5.87,
+        "profit_factor": 0.4186,
+        "win_pct": 33.33,
+        "mean_r": -0.2279,
+        "closed_trade_drawdown_pct": 9.68,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-11": 20.01,
+          "2024-12": 22.23,
+          "2025-02": -24.63,
+          "2025-07": -28.29,
+          "2025-09": -48.0
+        },
+        "session_net": {
+          "overlap": -27.92,
+          "london": -30.76
+        }
+      },
+      "stress": {
+        "trades": 6,
+        "net": -61.17,
+        "return_pct": -6.12,
+        "profit_factor": 0.405,
+        "win_pct": 33.33,
+        "mean_r": -0.2462,
+        "closed_trade_drawdown_pct": 9.87,
+        "longest_losing_streak": 4,
+        "month_net": {
+          "2024-11": 19.71,
+          "2024-12": 21.93,
+          "2025-02": -25.23,
+          "2025-07": -28.89,
+          "2025-09": -48.69
+        },
+        "session_net": {
+          "overlap": -29.11,
+          "london": -32.06
+        }
+      }
+    },
+    "asia-ny:sweep:fast": {
+      "signals": 574,
+      "base": {
+        "trades": 72,
+        "net": -317.6,
+        "return_pct": -31.76,
+        "profit_factor": 0.6491,
+        "win_pct": 37.5,
+        "mean_r": -0.2172,
+        "closed_trade_drawdown_pct": 33.72,
+        "longest_losing_streak": 6,
+        "month_net": {
+          "2024-11": -82.37,
+          "2024-12": -85.09,
+          "2025-01": -96.2,
+          "2025-02": 33.09,
+          "2025-03": -78.51,
+          "2025-04": 6.47,
+          "2025-05": 60.57,
+          "2025-06": -77.21,
+          "2025-07": 30.43,
+          "2025-08": 30.92,
+          "2025-09": -42.88,
+          "2025-10": -16.82
+        },
+        "session_net": {
+          "overlap": -256.73,
+          "new-york": -13.97,
+          "london": -46.9
+        }
+      },
+      "stress": {
+        "trades": 72,
+        "net": -335.52,
+        "return_pct": -33.55,
+        "profit_factor": 0.6337,
+        "win_pct": 37.5,
+        "mean_r": -0.237,
+        "closed_trade_drawdown_pct": 34.91,
+        "longest_losing_streak": 6,
+        "month_net": {
+          "2024-11": -89.42,
+          "2024-12": -89.69,
+          "2025-01": -94.06,
+          "2025-02": 35.11,
+          "2025-03": -79.91,
+          "2025-04": 5.92,
+          "2025-05": 59.72,
+          "2025-06": -79.91,
+          "2025-07": 28.68,
+          "2025-08": 29.97,
+          "2025-09": -44.81,
+          "2025-10": -17.11
+        },
+        "session_net": {
+          "overlap": -259.61,
+          "new-york": -18.9,
+          "london": -57.0
+        }
+      }
+    },
+    "asia-ny:sweep:standard": {
+      "signals": 124,
+      "base": {
+        "trades": 16,
+        "net": 20.27,
+        "return_pct": 2.03,
+        "profit_factor": 1.0971,
+        "win_pct": 50.0,
+        "mean_r": 0.0653,
+        "closed_trade_drawdown_pct": 5.36,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2024-11": -25.63,
+          "2024-12": 4.53,
+          "2025-02": 8.82,
+          "2025-03": -25.01,
+          "2025-04": 33.29,
+          "2025-05": 36.47,
+          "2025-06": -26.13,
+          "2025-07": -4.21,
+          "2025-09": 18.15
+        },
+        "session_net": {
+          "overlap": -25.12,
+          "london": 94.18,
+          "new-york": -48.79
+        }
+      },
+      "stress": {
+        "trades": 16,
+        "net": 4.79,
+        "return_pct": 0.48,
+        "profit_factor": 1.0225,
+        "win_pct": 50.0,
+        "mean_r": 0.048,
+        "closed_trade_drawdown_pct": 5.48,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2024-11": -26.23,
+          "2024-12": 2.73,
+          "2025-02": 7.92,
+          "2025-03": -25.51,
+          "2025-04": 33.09,
+          "2025-05": 36.17,
+          "2025-06": -26.73,
+          "2025-07": -5.91,
+          "2025-09": 9.26
+        },
+        "session_net": {
+          "overlap": -29.22,
+          "london": 83.59,
+          "new-york": -49.59
+        }
+      }
+    },
+    "asia-ny:sweep:conservative": {
+      "signals": 3,
+      "base": {
+        "trades": 3,
+        "net": -34.01,
+        "return_pct": -3.4,
+        "profit_factor": 0.259,
+        "win_pct": 33.33,
+        "mean_r": -0.493,
+        "closed_trade_drawdown_pct": 4.54,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2024-11": 11.89,
+          "2024-12": -21.15,
+          "2025-08": -24.75
+        },
+        "session_net": {
+          "overlap": 11.89,
+          "london": -45.9
+        }
+      },
+      "stress": {
+        "trades": 3,
+        "net": -35.51,
+        "return_pct": -3.55,
+        "profit_factor": 0.2461,
+        "win_pct": 33.33,
+        "mean_r": -0.514,
+        "closed_trade_drawdown_pct": 4.66,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2024-11": 11.59,
+          "2024-12": -21.75,
+          "2025-08": -25.35
+        },
+        "session_net": {
+          "overlap": 11.59,
+          "london": -47.1
+        }
+      }
+    },
+    "asia-ny:range:fast": {
+      "signals": 125,
+      "base": {
+        "trades": 13,
+        "net": -41.87,
+        "return_pct": -4.19,
+        "profit_factor": 0.7896,
+        "win_pct": 30.77,
+        "mean_r": -0.1855,
+        "closed_trade_drawdown_pct": 8.08,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-11": -18.37,
+          "2025-03": -19.69,
+          "2025-04": 18.71,
+          "2025-06": -49.89,
+          "2025-08": -3.15,
+          "2025-09": 50.76,
+          "2025-10": -20.25
+        },
+        "session_net": {
+          "new-york": -35.44,
+          "london": 13.28,
+          "overlap": -19.71
+        }
+      },
+      "stress": {
+        "trades": 13,
+        "net": -48.57,
+        "return_pct": -4.86,
+        "profit_factor": 0.7621,
+        "win_pct": 30.77,
+        "mean_r": -0.208,
+        "closed_trade_drawdown_pct": 8.4,
+        "longest_losing_streak": 3,
+        "month_net": {
+          "2024-11": -18.97,
+          "2025-03": -20.29,
+          "2025-04": 17.92,
+          "2025-06": -50.99,
+          "2025-08": -4.65,
+          "2025-09": 49.26,
+          "2025-10": -20.85
+        },
+        "session_net": {
+          "new-york": -38.54,
+          "london": 10.28,
+          "overlap": -20.31
+        }
+      }
+    },
+    "asia-ny:range:standard": {
+      "signals": 12,
+      "base": {
+        "trades": 0,
+        "net": 0.0,
+        "return_pct": 0.0,
+        "profit_factor": null,
+        "win_pct": null,
+        "mean_r": null,
+        "closed_trade_drawdown_pct": 0.0,
+        "longest_losing_streak": 0,
+        "month_net": {},
+        "session_net": {}
+      },
+      "stress": {
+        "trades": 0,
+        "net": 0.0,
+        "return_pct": 0.0,
+        "profit_factor": null,
+        "win_pct": null,
+        "mean_r": null,
+        "closed_trade_drawdown_pct": 0.0,
+        "longest_losing_streak": 0,
+        "month_net": {},
+        "session_net": {}
+      }
+    },
+    "asia-ny:range:conservative": {
+      "signals": 5,
+      "base": {
+        "trades": 2,
+        "net": -45.63,
+        "return_pct": -4.56,
+        "profit_factor": 0.0,
+        "win_pct": 0.0,
+        "mean_r": -0.976,
+        "closed_trade_drawdown_pct": 4.56,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2025-08": -20.55,
+          "2025-09": -25.08
+        },
+        "session_net": {
+          "london": -20.55,
+          "overlap": -25.08
+        }
+      },
+      "stress": {
+        "trades": 2,
+        "net": -46.72,
+        "return_pct": -4.67,
+        "profit_factor": 0.0,
+        "win_pct": 0.0,
+        "mean_r": -1.0,
+        "closed_trade_drawdown_pct": 4.67,
+        "longest_losing_streak": 2,
+        "month_net": {
+          "2025-08": -21.15,
+          "2025-09": -25.57
+        },
+        "session_net": {
+          "london": -21.15,
+          "overlap": -25.57
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1317 @@
+"""
+FastAPI Server & Application Controller for Gold Autonomous Trading Research Lab Pro.
+Runs strictly locally on macOS at 127.0.0.1:8000.
+Coordinates real-time market data, paper broker, automated bot,
+independent risk guardian, market regime monitor, AI research supervisor,
+diagnostics, learning autopsies, and Champion/Challenger promotion.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from datetime import datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import httpx
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
+
+from goldlab.agent_bridge import AgentBridge
+from goldlab.autofix import SafeAutoFixEngine
+from goldlab.backtester import BacktestingEngine
+from goldlab.bot import AutomatedPaperBot, BotState
+from goldlab.calendar import EconomicEvent, MacroNewsCalendar
+from goldlab.diagnostics import DiagnosticsEngine
+from goldlab.engine import ResearchEngine
+from goldlab.guardian import IndependentRiskGuardian
+from goldlab.learning import MistakeAnalyzerAndHypothesisRegistry
+from goldlab.market_gateway import MarketDataGateway, OandaProviderAdapter
+from goldlab.market_safety import (
+    InstrumentSpecification,
+    MarketQuote,
+    OandaReadOnlyFeed,
+    execution_gate,
+)
+from goldlab.ml_model import MLTradeQualityModel
+from goldlab.paper_broker import OrderDirection, OrderType, PaperBroker
+from goldlab.promotion import ChampionChallengerManager
+from goldlab.regime import MarketRegimeMonitor
+from goldlab.review_journal import DecisionJournal
+from goldlab.state_machine import SessionTradingStateMachine
+from goldlab.strategy_validation_lab import StrategyValidationLab
+from goldlab.supervisor import JobType, ResearchSupervisor
+from goldlab.session_workspace import SessionWorkspace
+
+TZ_UTC = timezone.utc
+
+app = FastAPI(
+    title="Gold Session Lab Pro — Autonomous Research Lab",
+    description="XAUUSD Institutional Market Structure Research, Paper Broker & Autonomous AI Lab",
+    version="3.0.0",
+)
+
+# Restrict CORS to localhost only for security
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Static and Templates
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+DATA_DIR = BASE_DIR / "data"
+REPORTS_DIR = BASE_DIR / "reports"
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+# Core Systems
+DB_PATH = str(DATA_DIR / "xauusd_lab.sqlite")
+engine = ResearchEngine(db_path=DB_PATH)
+market_feed = OandaReadOnlyFeed()
+market_gateway = MarketDataGateway(execution_provider=OandaProviderAdapter(market_feed))
+session_state_machine = SessionTradingStateMachine(db_path=DB_PATH)
+verified_quote: Optional[MarketQuote] = None
+market_block_reason = "NO_VERIFIED_LIVE_QUOTE"
+engine.market_data_source = "NO_VERIFIED_PROVIDER_DATA"
+broker = PaperBroker(db_path=DB_PATH)
+# The strategy runtime is immutable at 5m and independent of chart browsing.
+# Users switching their chart to 1m/15m must not silently change bot decisions.
+strategy_engine = ResearchEngine(db_path=DB_PATH)
+strategy_engine.current_timeframe = "5m"
+bot = AutomatedPaperBot(
+    account_id="ACC_DEFAULT",
+    broker=broker,
+    engine=strategy_engine,
+    db_path=DB_PATH,
+    state_machine=session_state_machine,
+)
+backtester = BacktestingEngine(db_path=DB_PATH)
+validation_lab = StrategyValidationLab(db_path=DB_PATH, reports_dir=str(REPORTS_DIR))
+
+# Autonomous Research & Safety Engines
+guardian = IndependentRiskGuardian(db_path=DB_PATH)
+regime_monitor = MarketRegimeMonitor()
+diagnostics = DiagnosticsEngine(db_path=DB_PATH)
+autofix = SafeAutoFixEngine(db_path=DB_PATH)
+agent_bridge = AgentBridge(db_path=DB_PATH)
+decision_journal = DecisionJournal(db_path=DB_PATH)
+session_workspace = SessionWorkspace(DB_PATH)
+learning = MistakeAnalyzerAndHypothesisRegistry(db_path=DB_PATH)
+ml_model = MLTradeQualityModel(db_path=DB_PATH, shadow_mode=True)
+promotion = ChampionChallengerManager(db_path=DB_PATH)
+supervisor = ResearchSupervisor(db_path=DB_PATH, reports_dir=str(REPORTS_DIR))
+
+# Calendar initialization
+engine.calendar = MacroNewsCalendar(
+    events=[
+        EconomicEvent(
+            name="US CPI (شاخص قیمت مصرف‌کننده)",
+            release_time=datetime(2026, 11, 10, 13, 30, tzinfo=TZ_UTC),
+            impact="HIGH",
+        ),
+        EconomicEvent(
+            name="US NFP (گزارش اشتغال بخش غیرکشاورزی)",
+            release_time=datetime(2026, 11, 6, 13, 30, tzinfo=TZ_UTC),
+            impact="HIGH",
+        ),
+        EconomicEvent(
+            name="FOMC Rate Decision (تصمیم نرخ بهره فدرال رزرو)",
+            release_time=datetime(2026, 11, 18, 19, 0, tzinfo=TZ_UTC),
+            impact="HIGH",
+        ),
+    ]
+)
+
+# Keep the scheduled economic blackout calendar consistent across engines.
+strategy_engine.calendar = engine.calendar
+
+# Load demo dataset on startup
+DEMO_CSV = DATA_DIR / "demo_xauusd_1m.csv"
+if market_feed.configured:
+    try:
+        candles = market_feed.historical_m1()
+        if candles:
+            engine.load_candles(candles, timeframe="5m", require_complete=True)
+            engine.market_data_source = "OANDA_HISTORICAL_MID"
+            engine.run_pipeline()
+    except Exception:
+        # Credential failures must not convert demo candles to a live quote.
+        pass
+if os.getenv("GOLDLAB_ENABLE_DEMO_REPLAY", "0") == "1" and not engine.current_candles and DEMO_CSV.exists():
+    try:
+        engine.load_from_csv(DEMO_CSV, timeframe="5m")
+        engine.market_data_source = "DEMO_CSV"
+        engine.run_pipeline()
+    except Exception as e:
+        print(f"Notice: Initial demo load: {e}")
+
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self) -> None:
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket) -> None:
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast_json(self, message: dict) -> None:
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_json(message)
+            except Exception:
+                self.disconnect(connection)
+
+
+ws_manager = ConnectionManager()
+
+# One read-only streaming task plus an independent safety/diagnostics watchdog.
+# No real broker order endpoints are implemented or authorized here.
+background_task: Optional[asyncio.Task] = None
+stream_task: Optional[asyncio.Task] = None
+
+
+async def _broadcast_market_unavailable(reason: str) -> None:
+    lesson = decision_journal.record_block(reason, evidence="market_execution_gate")
+    if lesson:
+        agent_bridge.record(
+            phase="OBSERVED", actor="RUNTIME",
+            subject="Market safety blocked: " + reason,
+            details=lesson["guidance"], evidence=lesson["event_id"],
+        )
+        await asyncio.to_thread(agent_bridge.write_handoff)
+        await ws_manager.broadcast_json({
+            "type": "AGENT_OBSERVATIONS", "count": 1,
+            "timestamp": datetime.now(TZ_UTC).isoformat(),
+        })
+    await ws_manager.broadcast_json({
+        "type": "MARKET_STATUS", "status": reason, "verified": False,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+
+
+def record_paper_position_events(opened_before, quote: MarketQuote) -> List[str]:
+    """Persist real closes before notifying the strategy; associate only its own order."""
+    closed = []
+    for pid, pos in broker.positions.items():
+        setup = session_state_machine.active_setup
+        belongs_to_setup = setup is not None and setup.order_id == pos.order_id
+        if pid in opened_before and pos.status.value == "CLOSED":
+            recorded = agent_bridge.record_closed_paper_trade(
+                trade_id=pid, direction=pos.direction.value, entry_price=pos.entry_price,
+                exit_price=pos.close_price if pos.close_price is not None else pos.current_price,
+                realized_pnl=pos.realized_pnl, close_reason=pos.close_reason or "CLOSED",
+                quote_source=quote.source,
+            )
+            if recorded:
+                closed.append(pid)
+                bot.on_trade_closed(pos.realized_pnl)
+            if belongs_to_setup:
+                session_state_machine.on_position_closed(quote, pos.close_reason or "CLOSED")
+        elif pid not in opened_before and pos.status.value == "OPEN" and belongs_to_setup:
+            if setup.position_id != pid:
+                session_state_machine.on_position_opened(pid, quote)
+    return closed
+
+
+async def oanda_stream_loop() -> None:
+    """Consume OANDA's official account-specific PRICE stream (max 4 updates/s).
+
+    Missing credentials, closed markets, heartbeats, stream disconnects and
+    outdated quotes NEVER trigger synthetic ticks or paper orders.
+    """
+    global verified_quote, market_block_reason
+    delay = 2
+    while True:
+        try:
+            if not market_feed.configured:
+                verified_quote = None
+                market_block_reason = "OANDA_NOT_CONFIGURED"
+                await asyncio.sleep(15)
+                continue
+            headers = {"Authorization": "Bearer " + market_feed.token,
+                       "Accept": "application/json"}
+            timeout = httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=10.0)
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+                async with client.stream("GET", market_feed.stream_url,
+                                         headers=headers) as response:
+                    response.raise_for_status()
+                    delay = 2
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            packet = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if packet.get("type") != "PRICE":
+                            # A HEARTBEAT is connection health, NOT a fresh quote.
+                            continue
+                        try:
+                            quote = market_feed.quote_from_price(packet)
+                        except (ValueError, KeyError, TypeError):
+                            verified_quote = None
+                            market_block_reason = "INVALID_PROVIDER_PRICE"
+                            await _broadcast_market_unavailable(market_block_reason)
+                            continue
+                        ok, reason = execution_gate(quote)
+                        verified_quote = quote if ok else None
+                        market_block_reason = reason
+                        if not ok:
+                            await _broadcast_market_unavailable(reason)
+                            continue
+                        # A verified quote can update the local PAPER broker only.
+                        opened_before = {
+                            pid for pid, pos in broker.positions.items()
+                            if pos.status.value == "OPEN"
+                        }
+                        broker.on_tick(quote.bid, quote.ask, timestamp=quote.timestamp)
+                        closed = record_paper_position_events(opened_before, quote)
+                        if closed:
+                            count = agent_bridge.observe_local_issues()
+                            await asyncio.to_thread(agent_bridge.write_handoff)
+                            await ws_manager.broadcast_json({
+                                "type": "AGENT_OBSERVATIONS", "count": count,
+                                "timestamp": datetime.now(TZ_UTC).isoformat(),
+                            })
+                            await ws_manager.broadcast_json({"type": "FILL", "paper_closes": closed})
+                        await ws_manager.broadcast_json({
+                            "type": "TICK", "bid": quote.bid, "ask": quote.ask,
+                            "bid_display": quote.bid_display,
+                            "ask_display": quote.ask_display,
+                            "timestamp": quote.timestamp.isoformat(),
+                            "source": quote.source, "verified": True,
+                        })
+            # A normal EOF is a disconnection, not a successful live feed.
+            verified_quote = None
+            market_block_reason = "LIVE_STREAM_DISCONNECTED"
+            await _broadcast_market_unavailable(market_block_reason)
+        except asyncio.CancelledError:
+            verified_quote = None
+            raise
+        except (httpx.HTTPError, OSError, RuntimeError) as error:
+            verified_quote = None
+            market_block_reason = "LIVE_STREAM_UNAVAILABLE"
+            # Avoid logging token, URL with credentials, or sensitive headers.
+            diagnostics.categorize_exception(
+                RuntimeError(type(error).__name__),
+                {"source": "oanda_stream", "error_type": type(error).__name__},
+            )
+            await _broadcast_market_unavailable(market_block_reason)
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 30)
+
+
+def process_provider_candles(bars) -> None:
+    """Keep chart navigation independent of the fixed 5m shadow event stream."""
+    engine.load_candles(bars, timeframe=engine.current_timeframe, require_complete=True)
+    engine.market_data_source = "OANDA_HISTORICAL_MID"
+    engine.run_pipeline()
+    completed_5m = engine.data_pipeline.aggregate_candles(
+        bars, "5m", require_complete=True,
+    )
+    if completed_5m:
+        session_state_machine.process_completed_5m_candles(
+            completed_5m, live_quote=verified_quote, calendar=engine.calendar,
+        )
+
+
+async def market_heartbeat_loop() -> None:
+    """Enforce quote TTL, refresh provider candles and publish real incidents."""
+    global verified_quote, market_block_reason
+    counter = 0
+    while True:
+        try:
+            await asyncio.sleep(5.0)
+            counter += 1
+            ok, reason = execution_gate(verified_quote)
+            if not ok:
+                verified_quote = None
+                market_block_reason = (
+                    reason if market_feed.configured else "OANDA_NOT_CONFIGURED"
+                )
+                if bot.state == BotState.PAPER_AUTO:
+                    bot.set_state(BotState.DATA_DISCONNECTED)
+                await _broadcast_market_unavailable(market_block_reason)
+
+            # Broadcast live TradingView price for real-time dashboard updates
+            try:
+                tv_quote = await fetch_tradingview_quote_async()
+                if tv_quote:
+                    market_gateway.update_tv_reference_quote(tv_quote)
+                    await ws_manager.broadcast_json({
+                        "type": "TRADINGVIEW_TICK",
+                        "quote": tv_quote,
+                    })
+            except Exception:
+                pass
+
+            if market_feed.configured and (counter == 1 or counter % 12 == 0):
+                try:
+                    bars = await asyncio.to_thread(market_feed.historical_m1)
+                    if bars:
+                        await asyncio.to_thread(session_workspace.save_provider_candles, bars)
+                        await asyncio.to_thread(process_provider_candles, bars)
+                        if verified_quote:
+                            bot_signals = bot.on_candle_close(
+                                bars,
+                                current_bid=verified_quote.bid,
+                                current_ask=verified_quote.ask,
+                                current_time=verified_quote.timestamp,
+                                strict_provider=True,
+                            )
+                            if bot_signals:
+                                await ws_manager.broadcast_json({
+                                    "type": "NEW_SIGNALS",
+                                    "count": len(bot_signals),
+                                    "timestamp": bars[-1].timestamp.isoformat(),
+                                })
+                        await ws_manager.broadcast_json({
+                            "type": "CANDLES_UPDATED", "source": "OANDA_HISTORICAL_MID",
+                            "timestamp": bars[-1].timestamp.isoformat(),
+                        })
+                except Exception as error:
+                    diagnostics.categorize_exception(
+                        RuntimeError(type(error).__name__),
+                        {"source": "provider_completed_candles", "error_type": type(error).__name__},
+                    )
+            if counter % 6 == 0:
+                supervisor.run_health_loop(broker)
+                guardian.audit_ledger_invariance("ACC_DEFAULT", broker)
+            # Local deterministic observer; only collects evidence. External
+            # Antigravity still requires a supported, explicit task runner.
+            observed = await asyncio.to_thread(agent_bridge.observe_local_issues)
+            if observed:
+                await asyncio.to_thread(agent_bridge.write_handoff)
+                await ws_manager.broadcast_json({
+                    "type": "AGENT_OBSERVATIONS", "count": observed,
+                    "timestamp": datetime.now(TZ_UTC).isoformat(),
+                })
+        except asyncio.CancelledError:
+            break
+        except Exception as error:
+            verified_quote = None
+            market_block_reason = "MARKET_WATCHDOG_ERROR"
+            diagnostics.categorize_exception(
+                RuntimeError(type(error).__name__),
+                {"source": "market_heartbeat_loop"},
+            )
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    global background_task
+    # Ensure research hypotheses and baseline champion are seeded
+    supervisor.run_research_cycle()
+    background_task = asyncio.create_task(market_heartbeat_loop())
+    global stream_task
+    stream_task = asyncio.create_task(oanda_stream_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    global background_task, stream_task
+    if background_task:
+        background_task.cancel()
+    if stream_task:
+        stream_task.cancel()
+
+
+def get_execution_status() -> Dict[str, Any]:
+    allowed, reason = execution_gate(verified_quote)
+    spec = InstrumentSpecification()
+    demo_chart = engine.market_data_source == "DEMO_CSV"
+    return {
+        "market_open": allowed,
+        "paper_orders_allowed": allowed and not demo_chart,
+        "chart_is_synthetic": demo_chart,
+        "paper_auto_allowed": False,
+        "reason": reason if not allowed else "VERIFIED_LIVE_PRICE",
+        "quote_source": verified_quote.source if verified_quote else None,
+        "quote_time": verified_quote.timestamp.isoformat() if verified_quote else None,
+        "bid": verified_quote.bid if verified_quote else None,
+        "ask": verified_quote.ask if verified_quote else None,
+        "bid_display": getattr(verified_quote, "bid_display", None) if verified_quote else None,
+        "ask_display": getattr(verified_quote, "ask_display", None) if verified_quote else None,
+        "mid": verified_quote.mid if verified_quote else None,
+        "spread": verified_quote.spread if verified_quote else None,
+        "spread_display": (
+            format(Decimal(verified_quote.ask_display)
+                   - Decimal(verified_quote.bid_display), "f")
+            if verified_quote and getattr(verified_quote, "bid_display", None)
+            and getattr(verified_quote, "ask_display", None) else None
+        ),
+        "last_update": verified_quote.timestamp.isoformat() if verified_quote else None,
+        "data_provider": verified_quote.source if verified_quote else "NONE",
+        "market_status": "OPEN" if allowed else ("DISCONNECTED" if not verified_quote else reason),
+        "chart_source": engine.market_data_source,
+        "provider_configured": market_feed.configured,
+        "historical_data_is_executable": False,
+        "instrument_spec": {
+            "symbol": spec.instrument,
+            "display_name": spec.display_name,
+            "display_precision": spec.display_precision,
+            "pip_location": spec.pip_location,
+            "tick_size": float(spec.tick_size),
+            "contract_size": float(spec.contract_size),
+            "max_spread": float(spec.max_spread),
+        },
+        "provider_notes": (
+            "تفاوت TradingView و OANDA: کتابخانه TradingView Lightweight Charts صرفاً یک ابزار بصری‌ساز چارت در مرورگر است و فید مستقیم ارسال سفارش یا کوت قیمت زنده ارائه نمی‌دهد. "
+            "داده‌های OANDA از طریق API v20 به عنوان ارائه‌دهنده قیمت‌های لحظه‌ای CFD با اسپرد متغیر دریافت می‌شوند. "
+            "قیمت‌های اسپات طلا (TVC/IDC)، فیوچرز (CME GC) و مظنه‌های بروکرها تفاوت طبیعی اسپرد و مبنا دارند و نباید به صورت ساختگی هم‌ارز شوند."
+        ),
+    }
+
+
+@app.get("/api/market/status")
+async def get_market_status() -> Dict[str, Any]:
+    return get_execution_status()
+
+
+@app.get("/api/sessions/calendar")
+async def get_session_calendar(days: int = 7) -> Dict[str, Any]:
+    return await asyncio.to_thread(session_workspace.calendar, days=days)
+
+
+@app.get("/api/research/session-plan")
+async def get_session_research_plan() -> Dict[str, Any]:
+    return await asyncio.to_thread(session_workspace.research)
+
+
+@app.post("/api/research/session-plan/queue")
+async def queue_session_research() -> Dict[str, Any]:
+    added = await asyncio.to_thread(session_workspace.queue_research)
+    await asyncio.to_thread(agent_bridge.write_handoff)
+    return {"added": added, "status": "QUEUED_FOR_REVIEW", "ai_executed": False}
+
+
+async def fetch_tradingview_quote_async() -> Optional[Dict[str, Any]]:
+    """Best-effort, UNOFFICIAL TradingView scanner reference. NEVER executable.
+
+    TradingView does not provide an open public market-data API for reuse.
+    The scanner is not a contract for executable Bid/Ask pricing, and may be
+    unavailable or restricted. We show it only if a real source timestamp
+    proves it is recent. Official embedded widgets are the safer reference.
+    """
+    try:
+        import math
+        url = "https://scanner.tradingview.com/cfd/scan"
+        payload = {
+            "symbols": {"tickers": ["OANDA:XAUUSD"]},
+            "columns": ["close", "bid", "ask", "high", "low", "open",
+                        "change", "change_abs", "volume", "time"],
+        }
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            res = await client.post(url, json=payload, headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            })
+            if res.status_code != 200:
+                return None
+            rows = res.json().get("data", [])
+            if not rows or rows[0].get("s") != "OANDA:XAUUSD":
+                return None
+            fields = rows[0].get("d", [])
+            if len(fields) < 10 or fields[0] is None or fields[9] is None:
+                return None
+            last = float(fields[0])
+            stamp = float(fields[9])
+            if stamp > 10_000_000_000:
+                stamp /= 1000  # Some sources represent epoch milliseconds.
+            if not math.isfinite(last) or last <= 0 or not math.isfinite(stamp):
+                return None
+            provider_time = datetime.fromtimestamp(stamp, tz=timezone.utc)
+            observed_time = datetime.now(timezone.utc)
+            age = (observed_time - provider_time).total_seconds()
+            if age < -5 or age > 30:
+                return None  # Market closed or quote is stale. No fake time.
+            return {
+                "symbol": "XAU/USD",
+                "ticker": "OANDA:XAUUSD",
+                "price": last,
+                "timestamp": int(stamp),
+                "time_iso": provider_time.isoformat(),
+                "received_at": observed_time.isoformat(),
+                "quote_age_seconds": age,
+                "source": "TRADINGVIEW_SCANNER_UNVERIFIED",
+                "data_role": "REFERENCE_ONLY",
+                "verified_for_execution": False,
+            }
+    except (ValueError, TypeError, KeyError, OverflowError, OSError,
+            httpx.HTTPError, RuntimeError):
+        return None
+
+
+@app.get("/api/tradingview/quote")
+async def get_tradingview_quote() -> Dict[str, Any]:
+    quote = await fetch_tradingview_quote_async()
+    if quote:
+        return {"status": "REFERENCE_ONLY", "quote": quote}
+    return {"status": "UNAVAILABLE", "message": "TradingView live quote temporarily unavailable"}
+
+
+@app.get("/api/market/comparison")
+async def get_market_comparison() -> Dict[str, Any]:
+    """Layer C side-by-side comparison between Layer A reference and Layer B execution feed."""
+    last_candle_price = (
+        engine.current_candles[-1].close if engine.current_candles else None
+    )
+    return market_gateway.get_comparison_payload(
+        verified_quote=verified_quote,
+        last_completed_candle_price=last_candle_price,
+    )
+
+
+@app.get("/api/strategy/state")
+async def get_strategy_state() -> Dict[str, Any]:
+    """Research state snapshot, explicitly NOT connected to the execution loop."""
+    result = session_state_machine.get_state_summary()
+    result["runtime_status"] = "NOT_WIRED_TO_LIVE_CANDLE_LOOP"
+    result["enabled_for_auto_trading"] = False
+    return result
+
+
+@app.get("/api/strategy/shadow-proposals")
+async def get_strategy_shadow_proposals(limit: int = 20) -> List[Dict[str, Any]]:
+    """Returns recent shadow proposals evaluated by the causal state machine."""
+    return session_state_machine.get_shadow_proposals(limit=limit)
+
+
+@app.get("/api/strategy/validation-report")
+async def get_strategy_validation_report() -> Dict[str, Any]:
+    """Returns the causal out-of-sample walk-forward validation report."""
+    from dataclasses import asdict
+    strat_file = REPORTS_DIR / "STRATEGY_VALIDATION.json"
+    if strat_file.exists():
+        try:
+            with strat_file.open("r", encoding="utf-8") as fp:
+                return json.load(fp)
+        except Exception:
+            pass
+    rep = validation_lab.run_validation(
+        csv_path=DEMO_CSV if DEMO_CSV.exists() else None,
+        candles=engine.current_candles if engine.current_candles else None,
+        timeframe=engine.current_timeframe,
+    )
+    return asdict(rep)
+
+
+# --- Pydantic Request Models ---
+class TimeframeRequest(BaseModel):
+    timeframe: str
+
+
+class OrderRequest(BaseModel):
+    direction: str  # BUY / SELL
+    order_type: str = "MARKET"  # MARKET / LIMIT / STOP
+    quantity_lots: float = 0.10
+    target_price: Optional[float] = None
+    sl_price: Optional[float] = None
+    tp_price: Optional[float] = None
+
+
+class FundRequest(BaseModel):
+    amount: float
+
+
+class BotStateRequest(BaseModel):
+    state: str
+
+
+class BotRiskRequest(BaseModel):
+    # Hard paper-trading risk ceilings. Never trust frontend controls alone.
+    risk_per_trade_pct: float = Field(gt=0, le=1.0, allow_inf_nan=False)
+    max_daily_loss_pct: float = Field(gt=0, le=2.0, allow_inf_nan=False)
+    max_open_positions: int = Field(ge=1, le=2)
+    max_daily_trades: int = Field(ge=1, le=4)
+    max_spread_pips: float = Field(gt=0, le=2.50, allow_inf_nan=False)
+
+
+class HypothesisCreateRequest(BaseModel):
+    title: str
+    rationale: str
+    target_metric: str
+
+
+class AutoFixActionRequest(BaseModel):
+    user_confirmed: bool = False
+    reason: str = ""
+
+
+class PromoteChallengerRequest(BaseModel):
+    challenger_id: str
+    user_confirmed: bool = False
+
+
+# --- Core Web & Market Endpoints ---
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_dashboard(request: Request) -> Any:
+    """Serves the primary Persian RTL Light-Theme Dashboard."""
+    return templates.TemplateResponse(request=request, name="index.html")
+
+
+@app.get("/api/market")
+async def get_market_data(timeframe: Optional[str] = None) -> Dict[str, Any]:
+    """Returns candle history, session levels, detected setups, and backtest summary."""
+    if timeframe and timeframe != engine.current_timeframe and engine.candles_1m:
+        engine.current_timeframe = timeframe
+        engine.current_candles = engine.data_pipeline.aggregate_candles(engine.candles_1m, timeframe)
+        engine.run_pipeline()
+    payload = engine.get_dashboard_payload()
+    payload["data_source"] = engine.market_data_source
+    payload["execution"] = get_execution_status()
+    payload["session_boxes"] = engine.session_mgr.calculate_session_boxes(engine.current_candles)
+    return payload
+
+
+@app.post("/api/market/timeframe")
+async def set_market_timeframe(req: TimeframeRequest) -> Dict[str, str]:
+    if req.timeframe not in ["1m", "5m", "15m", "1h"]:
+        raise HTTPException(status_code=400, detail="تایم‌فریم نامعتبر است.")
+    if engine.candles_1m:
+        engine.load_candles(engine.candles_1m, timeframe=req.timeframe)
+        engine.run_pipeline()
+    return {"status": "success", "timeframe": req.timeframe}
+
+
+@app.post("/api/market/load-demo")
+async def load_demo_data() -> Dict[str, Any]:
+    """Explicit educational replay only. Never silently load fake prices."""
+    if os.getenv("GOLDLAB_ENABLE_DEMO_REPLAY", "0") != "1":
+        raise HTTPException(
+            status_code=403,
+            detail="Demo replay is disabled. Set GOLDLAB_ENABLE_DEMO_REPLAY=1 explicitly.",
+        )
+    if DEMO_CSV.exists():
+        engine.load_from_csv(DEMO_CSV, timeframe=engine.current_timeframe)
+        engine.market_data_source = "DEMO_CSV"
+        engine.run_pipeline()
+        session_state_machine.process_completed_5m_candles(
+            engine.current_candles,
+            live_quote=None,
+            calendar=engine.calendar,
+        )
+        return {
+            "status": "SUCCESS",
+            "message": "داده‌های سشن‌ها بارگذاری شدند.",
+            "count": len(engine.current_candles),
+            "session_boxes": len(engine.session_mgr.calculate_session_boxes(engine.current_candles)),
+        }
+    raise HTTPException(status_code=404, detail="فایل دمو یافت نشد.")
+
+
+@app.get("/api/regime/current")
+async def get_current_regime() -> Dict[str, Any]:
+    """Returns real-time market regime, volatility ratio, trend slope, and trading favorability."""
+    is_news, _ = engine.calendar.is_blackout(datetime.now(TZ_UTC))
+    report = regime_monitor.analyze_regime(
+        candles=engine.current_candles,
+        current_spread=0.25,
+        is_news_blackout=is_news,
+    )
+    return {
+        "primary_regime": report.primary_regime.value,
+        "secondary_regime": report.secondary_regime.value if report.secondary_regime else None,
+        "atr_current": report.atr_current,
+        "atr_baseline": report.atr_baseline,
+        "volatility_ratio": report.volatility_ratio,
+        "adx_trend_slope": report.adx_trend_slope,
+        "false_breakout_rate": report.false_breakout_rate,
+        "current_spread": report.current_spread,
+        "is_favorable": report.is_favorable_for_trading,
+        "description": report.description,
+    }
+
+
+# --- Paper Broker Endpoints ---
+
+@app.get("/api/broker/account")
+async def get_account_info() -> Dict[str, Any]:
+    acc = broker.accounts.get("ACC_DEFAULT")
+    if not acc:
+        raise HTTPException(status_code=404, detail="حساب پیش‌فرض یافت نشد.")
+    broker.update_account_metrics("ACC_DEFAULT")
+
+    # Audit ledger invariance
+    ok, audit_msg = guardian.audit_ledger_invariance("ACC_DEFAULT", broker)
+
+    return {
+        "account_id": acc.account_id,
+        "name": acc.name,
+        "balance": acc.balance,
+        "equity": acc.equity,
+        "margin_used": acc.margin_used,
+        "margin_free": acc.margin_free,
+        "margin_level_pct": acc.margin_level_pct,
+        "unrealized_pnl": acc.unrealized_pnl,
+        "realized_pnl": acc.realized_pnl,
+        "leverage": acc.leverage,
+        "ledger_invariance_ok": ok,
+        "ledger_audit_msg": audit_msg,
+    }
+
+
+@app.post("/api/broker/deposit")
+async def deposit_funds(req: FundRequest) -> Dict[str, Any]:
+    acc = broker.deposit("ACC_DEFAULT", req.amount, notes="واریز دستی وجه مجازی")
+    return {"status": "success", "balance": acc.balance}
+
+
+@app.post("/api/broker/withdraw")
+async def withdraw_funds(req: FundRequest) -> Dict[str, Any]:
+    try:
+        acc = broker.withdraw("ACC_DEFAULT", req.amount, notes="برداشت دستی وجه مجازی")
+        return {"status": "success", "balance": acc.balance}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/broker/reset")
+async def reset_account() -> Dict[str, Any]:
+    acc = broker.reset_account("ACC_DEFAULT", 1000.0)
+    return {"status": "success", "balance": acc.balance}
+
+
+@app.get("/api/broker/positions")
+async def get_open_positions() -> List[Dict[str, Any]]:
+    return [
+        {
+            "position_id": p.position_id,
+            "symbol": p.symbol,
+            "direction": p.direction.value,
+            "quantity_lots": p.quantity_lots,
+            "entry_price": p.entry_price,
+            "current_price": p.current_price,
+            "sl_price": p.sl_price,
+            "tp_price": p.tp_price,
+            "unrealized_pnl": p.unrealized_pnl,
+            "entry_time": p.entry_time.isoformat(),
+        }
+        for p in broker.positions.values()
+        if p.status.value == "OPEN"
+    ]
+
+
+@app.post("/api/broker/positions/{pos_id}/close")
+async def close_position_endpoint(pos_id: str) -> Dict[str, Any]:
+    pos = broker.positions.get(pos_id)
+    if not pos or pos.status.value != "OPEN":
+        raise HTTPException(status_code=404, detail="موقعیت باز یافت نشد.")
+    allowed, reason = execution_gate(verified_quote)
+    if not allowed:
+        raise HTTPException(status_code=409, detail=f"Market close blocked: {reason}")
+    assert verified_quote is not None
+    exit_p = verified_quote.bid if pos.direction == OrderDirection.BUY else verified_quote.ask
+    closed_pos = broker.close_position(pos_id, exit_p, reason="MANUAL_CLOSE")
+
+    # Trigger post-trade autopsy
+    r_val = 0.0
+    if pos.sl_price and abs(pos.entry_price - pos.sl_price) > 0:
+        risk_dist = abs(pos.entry_price - pos.sl_price)
+        r_val = (closed_pos.realized_pnl / (risk_dist * pos.quantity_lots * 100.0))
+    learning.perform_autopsy(
+        trade_id=pos.position_id,
+        setup_id="MANUAL",
+        side=pos.direction.value,
+        pnl=closed_pos.realized_pnl,
+        r_multiple=r_val,
+        entry_price=pos.entry_price,
+        exit_price=exit_p,
+        sl_price=pos.sl_price or (pos.entry_price - 2.0),
+        tp_price=pos.tp_price or (pos.entry_price + 4.0),
+    )
+    bot.on_trade_closed(closed_pos.realized_pnl)
+    agent_bridge.record_closed_paper_trade(
+        trade_id=pos.position_id, direction=pos.direction.value,
+        entry_price=pos.entry_price, exit_price=exit_p,
+        realized_pnl=closed_pos.realized_pnl,
+        close_reason=closed_pos.close_reason or "MANUAL_CLOSE",
+        quote_source=verified_quote.source,
+    )
+    observed = agent_bridge.observe_local_issues()
+    await asyncio.to_thread(agent_bridge.write_handoff)
+    await ws_manager.broadcast_json({
+        "type": "AGENT_OBSERVATIONS", "count": observed,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+
+    return {"status": "success", "realized_pnl": closed_pos.realized_pnl}
+
+
+@app.get("/api/broker/orders")
+async def get_orders() -> List[Dict[str, Any]]:
+    return [
+        {
+            "order_id": o.order_id,
+            "direction": o.direction.value,
+            "order_type": o.order_type.value,
+            "quantity_lots": o.quantity_lots,
+            "target_price": o.target_price,
+            "sl_price": o.sl_price,
+            "tp_price": o.tp_price,
+            "status": o.status.value,
+            "created_time": o.created_time.isoformat(),
+        }
+        for o in broker.orders.values()
+    ]
+
+
+@app.post("/api/broker/order")
+async def submit_order_endpoint(req: OrderRequest) -> Dict[str, Any]:
+    direction = OrderDirection(req.direction.upper())
+    order_type = OrderType(req.order_type.upper())
+
+    allowed, reason = execution_gate(verified_quote)
+    if engine.market_data_source == "DEMO_CSV":
+        raise HTTPException(status_code=409, detail="Order blocked: synthetic chart replay active")
+    if not allowed:
+        raise HTTPException(status_code=409, detail=f"Order blocked: {reason}")
+    assert verified_quote is not None
+
+    try:
+        order = broker.submit_order(
+            account_id="ACC_DEFAULT",
+            direction=direction,
+            order_type=order_type,
+            quantity_lots=req.quantity_lots,
+            target_price=req.target_price,
+            sl_price=req.sl_price,
+            tp_price=req.tp_price,
+            current_bid=verified_quote.bid,
+            current_ask=verified_quote.ask,
+        )
+        return {"status": "success", "order_id": order.order_id, "order_status": order.status.value}
+    except Exception as e:
+        diagnostics.categorize_exception(e, {"source": "submit_order", "req": req.dict()})
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/broker/orders/{order_id}/cancel")
+async def cancel_order_endpoint(order_id: str) -> Dict[str, str]:
+    try:
+        broker.cancel_order(order_id)
+        return {"status": "success", "message": f"سفارش {order_id} با موفقیت لغو شد."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/api/broker/ledger")
+async def get_ledger_history() -> List[Dict[str, Any]]:
+    import sqlite3
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM wallet_ledger ORDER BY timestamp DESC LIMIT 50")
+        return [dict(row) for row in cur.fetchall()]
+
+
+# --- Bot Endpoints ---
+
+@app.get("/api/bot/status")
+async def get_bot_status() -> Dict[str, Any]:
+    import sqlite3
+
+    events = []
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute("SELECT * FROM bot_events ORDER BY timestamp DESC LIMIT 25")
+        events = [dict(r) for r in cur.fetchall()]
+        events.reverse()
+
+    return {
+        "bot_id": bot.bot_id,
+        "state": bot.state.value,
+        "heartbeat": bot.heartbeat_time.isoformat(),
+        "today_trades_count": bot.today_trades_count,
+        "consecutive_losses": bot.consecutive_losses,
+        "cooldown_remaining_bars": bot.cooldown_remaining_bars,
+        "daily_start_balance": bot.daily_start_balance,
+        "events": events,
+        "risk_settings": {
+            "risk_per_trade_pct": bot.risk.risk_per_trade_pct,
+            "max_daily_loss_pct": bot.risk.max_daily_loss_pct,
+            "max_open_positions": bot.risk.max_open_positions,
+            "max_daily_trades": bot.risk.max_daily_trades,
+            "max_spread_pips": bot.risk.max_spread_pips,
+        },
+    }
+
+
+@app.post("/api/bot/state")
+async def set_bot_state_endpoint(req: BotStateRequest) -> Dict[str, str]:
+    try:
+        new_state = BotState(req.state)
+        if new_state == BotState.PAPER_AUTO:
+            allowed, reason = execution_gate(verified_quote)
+            if not allowed:
+                raise HTTPException(status_code=409, detail=f"Paper auto blocked: {reason}")
+            # No automatic entries until causal next-bar strategy execution is validated.
+            raise HTTPException(status_code=409, detail="PAPER_AUTO_UNVERIFIED: strategy runtime has not passed execution tests.")
+        bot.set_state(new_state)
+        return {"status": "success", "new_state": bot.state.value}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/bot/risk")
+async def set_bot_risk_endpoint(req: BotRiskRequest) -> Dict[str, str]:
+    bot.risk.risk_per_trade_pct = req.risk_per_trade_pct
+    bot.risk.max_daily_loss_pct = req.max_daily_loss_pct
+    bot.risk.max_open_positions = req.max_open_positions
+    bot.risk.max_daily_trades = req.max_daily_trades
+    bot.risk.max_spread_pips = req.max_spread_pips
+    bot.log_event("RISK_UPDATED", "تنظیمات مدیریت ریسک ربات به‌روزرسانی شد.")
+    return {"status": "success"}
+
+
+@app.post("/api/bot/emergency-stop")
+async def emergency_stop_endpoint() -> Dict[str, str]:
+    bot.emergency_stop(reason="توقف اضطراری فعال شد توسط کاربر")
+    await ws_manager.broadcast_json({
+        "type": "BOT_STATE",
+        "state": bot.state.value,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+    return {"status": "success", "message": "توقف اضطراری فعال شد و کلیه معاملات خودکار مسدود گردید."}
+
+
+@app.post("/api/bot/resume")
+async def resume_bot_endpoint() -> Dict[str, str]:
+    bot.resume_after_emergency_stop(target_state=BotState.ANALYSIS_ONLY)
+    await ws_manager.broadcast_json({
+        "type": "BOT_STATE",
+        "state": bot.state.value,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    })
+    return {"status": "success", "message": "ربات از حالت توقف اضطراری خارج و در وضعیت تحلیل قرار گرفت."}
+
+
+# --- Backtest Endpoints ---
+
+@app.get("/api/backtest/compare")
+async def get_strategy_comparison() -> Dict[str, Any]:
+    """Runs all 8 strategies on the current dataset and returns comparison metrics."""
+    if not engine.current_candles:
+        raise HTTPException(status_code=400, detail="داده‌ای برای ارزیابی موجود نیست.")
+    results = backtester.run_strategy_comparison(engine.current_candles)
+    return {
+        "results": [
+            {
+                "strategy_id": r.strategy_id,
+                "strategy_name": r.strategy_name,
+                "total_trades": r.total_trades,
+                "win_rate_pct": r.win_rate_pct,
+                "profit_factor": r.profit_factor,
+                "expectancy_r": r.expectancy_r,
+                "max_drawdown_r": r.max_drawdown_r,
+                "evidence_status": r.evidence_status,
+            }
+            for r in results
+        ]
+    }
+
+
+# --- Calendar Endpoints ---
+
+@app.get("/api/calendar")
+async def get_calendar_events() -> Dict[str, Any]:
+    now = datetime.now(TZ_UTC)
+    events_data = []
+    for ev in engine.calendar.events:
+        is_blocked, _ = engine.calendar.is_blackout(now)
+        events_data.append({
+            "name": ev.name,
+            "release_time": ev.release_time.isoformat(),
+            "impact": ev.impact,
+            "status": "مسدود شده (Blackout Active)" if is_blocked else "عادی (Clear)",
+            "is_blackout": is_blocked,
+        })
+    return {"events": events_data}
+
+
+# --- Antigravity transparent bridge (no invented live agent) ---
+@app.get("/api/agent/status")
+async def get_agent_status() -> Dict[str, Any]:
+    return agent_bridge.state()
+
+
+@app.get("/api/agent/supervisor-report")
+async def get_supervisor_report() -> Dict[str, Any]:
+    """Display ONLY evidenced Antigravity work. Never fabricate CI counts or SHAs."""
+    state = agent_bridge.state()
+    agent_events = [
+        event for event in state.get("events", [])
+        if event.get("actor") == "ANTIGRAVITY"
+    ]
+    def latest_event(*phases: str) -> Optional[Dict[str, Any]]:
+        return next((event for event in agent_events
+                     if event.get("phase") in phases), None)
+
+    investigated = latest_event("REPRODUCED", "INVESTIGATING", "OBSERVED")
+    proposed = latest_event("PATCH_PROPOSED")
+    tested = latest_event("TESTS_FAILED", "TESTS_PASSED")
+    referenced = next((event for event in agent_events if event.get("git_ref")), None)
+
+    strat_file = REPORTS_DIR / "STRATEGY_VALIDATION.json"
+    strat_audit_text = "در انتظار اعتبارسنجی مستقل؛ هیچ ادعایی دربارهٔ سودآوری یا نبود Lookahead تأیید نشده است."
+    if strat_file.exists():
+        try:
+            with strat_file.open("r", encoding="utf-8") as fp:
+                report = json.load(fp)
+            strat_audit_text = (
+                f"گزارش محلیِ تأییدنشده: {report.get('outcome', 'INCONCLUSIVE')}"
+                "؛ نتایج فقط پس از بررسی داده و آزمون مستقل معتبرند."
+            )
+        except (OSError, ValueError, TypeError):
+            pass
+
+    return {
+        "status": "SUCCESS",
+        "agent_status": state.get("agent_status", "NOT_CONNECTED"),
+        "last_inspection": (
+            state.get("agent_last_activity")
+            if state.get("agent_status") == "RECENT_ACTIVITY"
+            else None
+        ),
+        "discovered_issue": (
+            investigated.get("subject") if investigated else
+            "هنوز بررسی ثبت‌شده‌ای از Antigravity وجود ندارد."
+        ),
+        "probable_cause": (
+            investigated.get("details") if investigated else
+            "علت هنوز توسط عامل بررسی و مستند نشده است."
+        ),
+        "reproduction_test": (
+            investigated.get("evidence") if investigated and
+            investigated.get("phase") == "REPRODUCED" else
+            "تست بازتولید مستند نشده است."
+        ),
+        "proposed_patch": (
+            proposed.get("subject") if proposed else
+            "پیشنهاد اصلاحیهٔ مستند وجود ندارد."
+        ),
+        "test_outcome": (
+            f"{tested['phase']}: {tested.get('evidence') or 'شواهد ثبت نشده'}"
+            if tested else
+            "هنوز نتیجهٔ تستی از اجرای Antigravity ثبت نشده؛ GitHub Actions مستقل است."
+        ),
+        "verification_status": (
+            "فعالیت اخیر ثبت شده؛ اتصال زندهٔ پیوسته تأیید نشده است."
+            if state.get("agent_status") == "RECENT_ACTIVITY"
+            else "عامل متصل نیست؛ فعالیت تأییدشدهٔ جاری وجود ندارد."
+        ),
+        "inspected_git_ref": (
+            referenced["git_ref"] if referenced else "نسخهٔ بررسی‌شده ثبت نشده است."
+        ),
+        "strategy_audit_result": strat_audit_text,
+        "open_incidents_count": state.get("open_incidents", 0),
+        "verified_fixes_count": state.get("verified_fixes", 0),
+        "hypotheses_count": state.get("hypotheses_under_review", 0),
+        "pending_proposals_count": state.get("pending_patch_proposals", 0),
+    }
+
+@app.get("/api/agent/advice")
+async def get_agent_advice(limit: int = 15) -> Dict[str, Any]:
+    """Observed next-time safety advice and post-trade autopsies; deterministic, NOT claimed AI learning."""
+    return {
+        "kind": "DETERMINISTIC_SAFETY_RULES_AND_TRADE_AUTOPSIES",
+        "items": decision_journal.recent(limit),
+        "safety_lessons": decision_journal.recent(limit),
+        "trade_guidance": learning.get_next_time_guidance(limit),
+        "paper_auto_enabled": False,
+        "antigravity_autonomous_agent_attached": False,
+    }
+
+
+# --- AI Research Supervisor Endpoints ---
+
+@app.get("/api/supervisor/status")
+async def get_supervisor_status() -> Dict[str, Any]:
+    """Returns state of research cycles, current champion, and recent job queue."""
+    champ = promotion.get_current_champion()
+    recent_jobs = supervisor.list_jobs(limit=10)
+    return {
+        "status": "LOCAL_SUPERVISOR_ONLY",
+        "antigravity": agent_bridge.state()["agent_status"],
+        "champion": {
+            "name": champ.name if champ else "None",
+            "expectancy_r": champ.expectancy_r if champ else 0.0,
+            "win_rate": champ.win_rate if champ else 0.0,
+            "trades": champ.total_trades if champ else 0,
+        },
+        "recent_jobs": recent_jobs,
+        "timestamp": datetime.now(TZ_UTC).isoformat(),
+    }
+
+
+@app.post("/api/supervisor/trigger")
+async def trigger_supervisor_cycle(cycle_type: str) -> Dict[str, Any]:
+    """Manually triggers a specific research loop (HEALTH, DIAGNOSTICS, RESEARCH, NIGHTLY)."""
+    try:
+        jt = JobType(cycle_type.upper())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"نوع چرخه نامعتبر است: {cycle_type}")
+
+    job = supervisor.enqueue_job(jt)
+    executed_job = supervisor.execute_next_pending_job(broker)
+    return {
+        "status": "success",
+        "job_id": job.job_id,
+        "result": executed_job.result if executed_job else {},
+    }
+
+
+# --- Diagnostics & Auto-Fix Endpoints ---
+
+@app.get("/api/diagnostics/incidents")
+async def get_diagnostic_incidents(limit: int = 50) -> List[Dict[str, Any]]:
+    return diagnostics.get_recent_incidents(limit=limit)
+
+
+@app.get("/api/diagnostics/summary")
+async def get_diagnostic_summary() -> Dict[str, Any]:
+    counts = diagnostics.get_category_counts()
+    return {"category_counts": counts}
+
+
+@app.get("/api/autofix/proposals")
+async def get_autofix_proposals(limit: int = 50) -> List[Dict[str, Any]]:
+    return autofix.list_proposals(limit=limit)
+
+
+@app.post("/api/autofix/proposals/{proposal_id}/approve")
+async def approve_autofix_proposal(proposal_id: str, req: AutoFixActionRequest) -> Dict[str, Any]:
+    res = autofix.approve_and_apply_fix(proposal_id, user_confirmed=req.user_confirmed)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("message"))
+    return res
+
+
+@app.post("/api/autofix/proposals/{proposal_id}/reject")
+async def reject_autofix_proposal(proposal_id: str, req: AutoFixActionRequest) -> Dict[str, str]:
+    autofix.reject_fix(proposal_id, reason=req.reason)
+    return {"status": "success", "message": f"اصلاحیه {proposal_id} رد شد."}
+
+
+# --- Learning & Hypothesis Registry Endpoints ---
+
+@app.get("/api/learning/autopsies")
+async def get_trade_autopsies(limit: int = 50) -> List[Dict[str, Any]]:
+    return learning.list_autopsies(limit=limit)
+
+
+@app.get("/api/learning/hypotheses")
+async def get_hypotheses(limit: int = 50) -> List[Dict[str, Any]]:
+    return learning.list_hypotheses(limit=limit)
+
+
+@app.post("/api/learning/hypotheses")
+async def create_hypothesis_endpoint(req: HypothesisCreateRequest) -> Dict[str, Any]:
+    hyp = learning.register_hypothesis(
+        title=req.title,
+        rationale=req.rationale,
+        target_metric=req.target_metric,
+    )
+    return {"status": "success", "hypothesis_id": hyp.hypothesis_id}
+
+
+# --- ML Shadow Scores Endpoints ---
+
+@app.get("/api/ml/scores")
+async def get_ml_scores(limit: int = 50) -> List[Dict[str, Any]]:
+    return ml_model.get_recent_scores(limit=limit)
+
+
+# --- Champion / Challenger Promotion Endpoints ---
+
+@app.get("/api/promotion/versions")
+async def get_strategy_versions() -> List[Dict[str, Any]]:
+    return promotion.list_versions()
+
+
+@app.get("/api/promotion/evaluate/{challenger_id}")
+async def evaluate_challenger(challenger_id: str) -> Dict[str, Any]:
+    return promotion.evaluate_challenger_promotion(challenger_id)
+
+
+@app.post("/api/promotion/promote")
+async def promote_challenger_endpoint(req: PromoteChallengerRequest) -> Dict[str, Any]:
+    res = promotion.promote_challenger(
+        challenger_id=req.challenger_id,
+        user_confirmed=req.user_confirmed,
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("message"))
+    return res
+
+
+# --- Reports Endpoint ---
+
+@app.get("/api/reports/latest")
+async def get_latest_report() -> Dict[str, Any]:
+    report_files = sorted(REPORTS_DIR.glob("DAILY_RESEARCH_REPORT_*.md"), reverse=True)
+    if not report_files:
+        # Trigger nightly report generation
+        res = supervisor.run_nightly_evaluation(broker)
+        report_files = [Path(res["report_path"])]
+
+    latest_file = report_files[0]
+    content = latest_file.read_text(encoding="utf-8")
+    return {
+        "filename": latest_file.name,
+        "content": content,
+    }
+
+
+# --- WebSocket Endpoint ---
+
+@app.websocket("/ws/live")
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    # Validate origin: allow local connections only (CSWSH defense)
+    origin = websocket.headers.get("origin")
+    if origin:
+        from urllib.parse import urlparse
+        parsed = urlparse(origin)
+        allowed_hosts = {"localhost", "127.0.0.1", "0.0.0.0"}
+        if parsed.hostname not in allowed_hosts:
+            await websocket.close(code=1008)
+            return
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception:
+        ws_manager.disconnect(websocket)
+
+
+if __name__ == "__main__":
+    if not engine.current_candles and DEMO_CSV.exists():
+        engine.load_from_csv(DEMO_CSV, timeframe="5m")
+        engine.market_data_source = "DEMO_CSV"
+        engine.run_pipeline()
+    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)

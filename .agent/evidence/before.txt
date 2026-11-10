@@ -1,0 +1,125 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+________________ test_missing_quote_cannot_invent_shadow_spread ________________
+
+tmp_path = PosixPath('/private/var/folders/zn/xjzfj13s0lv_k0s_thgq2ldw0000gn/T/pytest-of-alifiroozi/pytest-67/test_missing_quote_cannot_inve0')
+
+    def test_missing_quote_cannot_invent_shadow_spread(tmp_path):
+        sm = SessionTradingStateMachine(db_path=str(tmp_path / 'sm.sqlite'))
+        row = proposal(sm)
+>       assert row['spread'] is None
+E       assert 0.3 is None
+
+tests/test_runtime_repair.py:27: AssertionError
+_________________ test_calendar_does_not_bypass_reward_filter __________________
+
+tmp_path = PosixPath('/private/var/folders/zn/xjzfj13s0lv_k0s_thgq2ldw0000gn/T/pytest-of-alifiroozi/pytest-67/test_calendar_does_not_bypass_0')
+
+    def test_calendar_does_not_bypass_reward_filter(tmp_path):
+        sm = SessionTradingStateMachine(db_path=str(tmp_path / 'sm.sqlite'))
+        q = MarketQuote(100, 100.2, AT + timedelta(minutes=5), 'OANDA_V20_READ_ONLY', tradeable=True)
+>       assert proposal(sm, q, MacroNewsCalendar(events=[]), reward=1)['status'] == 'REJECTED_RISK'
+E       AssertionError: assert 'REJECTED_NEWS' == 'REJECTED_RISK'
+E         
+E         - REJECTED_RISK
+E         ?          ^^ -
+E         + REJECTED_NEWS
+E         ?          ^^^
+
+tests/test_runtime_repair.py:34: AssertionError
+________________ test_shadow_receives_only_complete_5m_bars[1m] ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10a04e590>
+timeframe = '1m'
+
+    @pytest.mark.parametrize('timeframe', ['1m', '15m', '1h'])
+    def test_shadow_receives_only_complete_5m_bars(monkeypatch, timeframe):
+        import app as runtime
+        bars = [Candle(timestamp=AT + timedelta(minutes=i), open=100, high=101, low=99,
+                       close=100, is_closed=True) for i in range(8)]
+        received = []
+        monkeypatch.setattr(runtime.engine, 'current_timeframe', timeframe)
+        monkeypatch.setattr(runtime.engine, 'run_pipeline', lambda: None)
+        monkeypatch.setattr(runtime.session_state_machine, 'process_completed_5m_candles',
+                            lambda values, **kw: received.extend(values))
+>       runtime.process_provider_candles(bars)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'app' has no attribute 'process_provider_candles'
+
+tests/test_runtime_repair.py:47: AttributeError
+_______________ test_shadow_receives_only_complete_5m_bars[15m] ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10aed0f90>
+timeframe = '15m'
+
+    @pytest.mark.parametrize('timeframe', ['1m', '15m', '1h'])
+    def test_shadow_receives_only_complete_5m_bars(monkeypatch, timeframe):
+        import app as runtime
+        bars = [Candle(timestamp=AT + timedelta(minutes=i), open=100, high=101, low=99,
+                       close=100, is_closed=True) for i in range(8)]
+        received = []
+        monkeypatch.setattr(runtime.engine, 'current_timeframe', timeframe)
+        monkeypatch.setattr(runtime.engine, 'run_pipeline', lambda: None)
+        monkeypatch.setattr(runtime.session_state_machine, 'process_completed_5m_candles',
+                            lambda values, **kw: received.extend(values))
+>       runtime.process_provider_candles(bars)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'app' has no attribute 'process_provider_candles'
+
+tests/test_runtime_repair.py:47: AttributeError
+________________ test_shadow_receives_only_complete_5m_bars[1h] ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b182d50>
+timeframe = '1h'
+
+    @pytest.mark.parametrize('timeframe', ['1m', '15m', '1h'])
+    def test_shadow_receives_only_complete_5m_bars(monkeypatch, timeframe):
+        import app as runtime
+        bars = [Candle(timestamp=AT + timedelta(minutes=i), open=100, high=101, low=99,
+                       close=100, is_closed=True) for i in range(8)]
+        received = []
+        monkeypatch.setattr(runtime.engine, 'current_timeframe', timeframe)
+        monkeypatch.setattr(runtime.engine, 'run_pipeline', lambda: None)
+        monkeypatch.setattr(runtime.session_state_machine, 'process_completed_5m_candles',
+                            lambda values, **kw: received.extend(values))
+>       runtime.process_provider_candles(bars)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'app' has no attribute 'process_provider_candles'
+
+tests/test_runtime_repair.py:47: AttributeError
+=============================== warnings summary ===============================
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+  /Users/alifiroozi/ali/gold-session-candidate/app.py:410: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+  /Users/alifiroozi/ali/سشن/.venv/lib/python3.11/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+  /Users/alifiroozi/ali/gold-session-candidate/app.py:420: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_runtime_repair.py::test_missing_quote_cannot_invent_shadow_spread
+FAILED tests/test_runtime_repair.py::test_calendar_does_not_bypass_reward_filter
+FAILED tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+FAILED tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[15m]
+FAILED tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1h]

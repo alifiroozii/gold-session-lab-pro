@@ -1,0 +1,71 @@
+.....FF                                                                  [100%]
+=================================== FAILURES ===================================
+_____________ test_shadow_rejects_stale_or_untrusted_quote[quote0] _____________
+
+tmp_path = PosixPath('/private/var/folders/zn/xjzfj13s0lv_k0s_thgq2ldw0000gn/T/pytest-of-alifiroozi/pytest-69/test_shadow_rejects_stale_or_u0')
+quote = MarketQuote(bid=100, ask=100.2, timestamp=datetime.datetime(2026, 11, 9, 13, 0, tzinfo=datetime.timezone.utc), source='OANDA_V20_READ_ONLY', instrument='XAU_USD', tradeable=True, bid_display='', ask_display='')
+
+    @pytest.mark.parametrize('quote', [
+        MarketQuote(100, 100.2, AT - timedelta(hours=1), 'OANDA_V20_READ_ONLY', tradeable=True),
+        MarketQuote(100, 100.2, AT + timedelta(minutes=5), 'UNVERIFIED', tradeable=True),
+    ])
+    def test_shadow_rejects_stale_or_untrusted_quote(tmp_path, quote):
+        sm = SessionTradingStateMachine(db_path=str(tmp_path / 'sm.sqlite'))
+>       assert proposal(sm, quote)['status'] == 'REJECTED_QUOTE'
+E       AssertionError: assert 'ELIGIBLE_SHADOW' == 'REJECTED_QUOTE'
+E         
+E         - REJECTED_QUOTE
+E         + ELIGIBLE_SHADOW
+
+tests/test_runtime_repair.py:58: AssertionError
+_____________ test_shadow_rejects_stale_or_untrusted_quote[quote1] _____________
+
+tmp_path = PosixPath('/private/var/folders/zn/xjzfj13s0lv_k0s_thgq2ldw0000gn/T/pytest-of-alifiroozi/pytest-69/test_shadow_rejects_stale_or_u1')
+quote = MarketQuote(bid=100, ask=100.2, timestamp=datetime.datetime(2026, 11, 9, 14, 5, tzinfo=datetime.timezone.utc), source='UNVERIFIED', instrument='XAU_USD', tradeable=True, bid_display='', ask_display='')
+
+    @pytest.mark.parametrize('quote', [
+        MarketQuote(100, 100.2, AT - timedelta(hours=1), 'OANDA_V20_READ_ONLY', tradeable=True),
+        MarketQuote(100, 100.2, AT + timedelta(minutes=5), 'UNVERIFIED', tradeable=True),
+    ])
+    def test_shadow_rejects_stale_or_untrusted_quote(tmp_path, quote):
+        sm = SessionTradingStateMachine(db_path=str(tmp_path / 'sm.sqlite'))
+>       assert proposal(sm, quote)['status'] == 'REJECTED_QUOTE'
+E       AssertionError: assert 'ELIGIBLE_SHADOW' == 'REJECTED_QUOTE'
+E         
+E         - REJECTED_QUOTE
+E         + ELIGIBLE_SHADOW
+
+tests/test_runtime_repair.py:58: AssertionError
+=============================== warnings summary ===============================
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+  /Users/alifiroozi/ali/gold-session-candidate/app.py:416: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+  /Users/alifiroozi/ali/سشن/.venv/lib/python3.11/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_runtime_repair.py::test_shadow_receives_only_complete_5m_bars[1m]
+  /Users/alifiroozi/ali/gold-session-candidate/app.py:426: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_runtime_repair.py::test_shadow_rejects_stale_or_untrusted_quote[quote0]
+FAILED tests/test_runtime_repair.py::test_shadow_rejects_stale_or_untrusted_quote[quote1]
